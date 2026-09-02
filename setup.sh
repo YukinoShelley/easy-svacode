@@ -148,6 +148,7 @@ if [ "$GPU" = "g" ]; then
     -D INSTALL_C_EXAMPLES=OFF -D INSTALL_PYTHON_EXAMPLES=OFF \
     -D BUILD_opencv_python3=OFF -D BUILD_opencv_python3_tests=OFF \
     -D BUILD_EXAMPLES=OFF -D WITH_TBB=ON -D WITH_CUDA=ON \
+    -D WITH_IPP=OFF \
     -D CUDA_ARCH_BIN="$CUDA_ARCH_BIN" -D CUDA_ARCH_PTX="" \
     -D WITH_CUDNN=ON -D OPENCV_DNN_CUDA=ON \
     -D CUDNN_INCLUDE_DIR=/usr/include/x86_64-linux-gnu/ \
@@ -160,11 +161,13 @@ if [ "$GPU" = "g" ]; then
     -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF -D BUILD_TIFF=OFF \
     -D OPENCV_GENERATE_SETUPVARS=OFF ..
 else
+  # WITH_IPP=OFF：跳过 100MB 的 ippicv 下载（raw.githubusercontent 网络不稳/被墙时安装会卡死；IPP 为可选加速，不影响功能）
   cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local \
     -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
     -D INSTALL_C_EXAMPLES=OFF -D INSTALL_PYTHON_EXAMPLES=OFF \
     -D BUILD_opencv_python3=OFF -D BUILD_opencv_python3_tests=OFF \
     -D BUILD_EXAMPLES=OFF -D WITH_TBB=ON -D WITH_CUDA=OFF \
+    -D WITH_IPP=OFF \
     -D WITH_CUDNN=OFF -D OPENCV_DNN_CUDA=OFF -D WITH_TENSORRT=OFF \
     -D WITH_V4L=ON -D WITH_QT=ON -D WITH_OPENGL=ON \
     -D OPENCV_GENERATE_PKGCONFIG=ON -D OPENCV_PC_FILE_NAME=opencv4.pc \
