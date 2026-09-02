@@ -171,13 +171,11 @@ fi
 make -j$(($(nproc)>6?6:$(nproc)))
 make install
 
-# ---------------- 5. curl 与 MediaServer ----------------
-cd /opt/easySVA-lib
-unzip -o curl-7.83.0.zip
-cd curl-7.83.0
-./configure --with-openssl --enable-http3 --enable-threaded-resolver --enable-versioned-symbols
-make -j$(($(nproc)>6?6:$(nproc)))
-make install
+# ---------------- 5. MediaServer（使用系统 libcurl） ----------------
+# 说明：不自编译 curl 7.83 到 /usr/local —— 其 libcurl.so.4 会遮蔽系统 libcurl
+# （符号版本不兼容），导致系统 curl 报 "undefined symbol: curl_easy_header, version CURL_OPENSSL_4"。
+# 改用系统 libcurl4-openssl-dev，MediaServer 直接链接系统库。
+apt install -y libcurl4-openssl-dev
 
 cd "$ROOT/SVA-mediaServer"
 mkdir -p build && cd build
