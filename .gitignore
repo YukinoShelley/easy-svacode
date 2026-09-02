@@ -1,0 +1,19 @@
+# ============ 构建产物 ============
+**/target/
+**/node_modules/
+**/dist/
+**/build/
+SVA-mediaServer/release/
+*.class
+*.jar
+
+# ============ 大文件（依赖包约 4.76GB，不入 git 历史） ============
+# 如需纳入版本管理，请使用 Git LFS（如 Gitee LFS 空间足够）：
+#   git lfs track "deps/*.zip"
+deps/*.zip
+
+# ============ 系统 / IDE ============
+.DS_Store
+*.swp
+.idea/
+.vscode/
