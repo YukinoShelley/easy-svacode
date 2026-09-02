@@ -205,7 +205,15 @@ apt install -y redis-server mariadb-server
 systemctl enable mariadb || true
 /etc/init.d/mariadb start || service mariadb start || true
 
-mysql <<EOF
+# 数据库初始化：兼容两种场景
+#   - 全新安装：root 免密（unix_socket），直接用 mysql
+#   - 重跑/已装过：root 已有密码 easySVA.EZ，需带密码执行
+if mysql -uroot -peasySVA.EZ -e "SELECT 1" >/dev/null 2>&1; then
+  MYSQL_INIT="mysql -uroot -peasySVA.EZ"
+else
+  MYSQL_INIT="mysql"
+fi
+$MYSQL_INIT <<EOF
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'easySVA.EZ';
 DELETE FROM mysql.user WHERE User='';
 DROP DATABASE IF EXISTS test;
