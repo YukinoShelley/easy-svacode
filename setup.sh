@@ -97,7 +97,16 @@ else
 fi
 
 mkdir -p /opt/SVA/tmp/trt_cache
-mv /opt/easySVA-lib/models /opt/SVA/
+if [ -d /opt/easySVA-lib/models ]; then
+  mv /opt/easySVA-lib/models /opt/SVA/
+else
+  # 模型缺失（依赖目录被清理/移动过）：从依赖包重新解压
+  echo "⚠️ /opt/easySVA-lib/models 不存在，从依赖包重新解压模型..."
+  unzip -o "$DEPS_ZIP" '*/models/*' -d /opt/
+  [ -d /opt/Analyzer-lib/models ] && mv /opt/Analyzer-lib/models /opt/SVA/models
+  [ -d /opt/SVA/models ] || { echo "❌ 模型解压失败，请检查 deps/Analyzer-lib.zip"; exit 1; }
+fi
+echo "✅ 模型就位：$(ls /opt/SVA/models | tr '\n' ' ')"
 
 # ---------------- 3. 基础依赖与 FFmpeg ----------------
 apt install -y git cmake yasm libfaac-dev libmp3lame-dev libopus-dev libx264-dev \
