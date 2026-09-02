@@ -47,17 +47,33 @@ start_analyzer() {
   echo -e "$INFO 分析器(9993) 启动中...（日志 /opt/SVA/server/log.out）"
 }
 
-start_mediamtx() {   # 可选：虚拟摄像头
-  if is_run 'mediamtx'; then echo -e "$OK  虚拟摄像头(8554) 已在运行"; return; fi
-  cd /opt/sva-test && nohup ./mediamtx mediamtx.yml > mediamtx.log 2>&1 &
+# ===== 可选测试组件（虚拟摄像头）=====
+# 未安装时自动跳过，不影响正常使用。可配置：
+#   MEDIAMTX_DIR：mediamtx 所在目录（默认 /opt/sva-test）
+#   TEST_VIDEO：  测试视频文件（默认 /usr/local/share/sintel.mp4）
+MEDIAMTX_DIR="${MEDIAMTX_DIR:-/opt/sva-test}"
+TEST_VIDEO="${TEST_VIDEO:-/usr/local/share/sintel.mp4}"
+
+start_mediamtx() {
+  if [ ! -x "$MEDIAMTX_DIR/mediamtx" ]; then
+    echo -e "$INFO 跳过虚拟摄像头（未安装：$MEDIAMTX_DIR/mediamtx，可选组件）"
+    return 1
+  fi
+  if is_run 'mediamtx'; then echo -e "$OK  虚拟摄像头(8554) 已在运行"; return 0; fi
+  cd "$MEDIAMTX_DIR" && nohup ./mediamtx mediamtx.yml > mediamtx.log 2>&1 &
   echo -e "$INFO 虚拟摄像头(8554) 启动中..."
 }
 
-start_teststream() { # 可选：向 8554 循环推流测试视频
-  if is_run 'sintel\.mp4'; then echo -e "$OK  测试推流 已在运行"; return; fi
-  nohup /usr/local/ffmpeg/bin/ffmpeg -re -stream_loop -1 -i /root/dsh/downloads/sintel.mp4 \
+start_teststream() {
+  if [ ! -f "$TEST_VIDEO" ]; then
+    echo -e "$INFO 跳过测试推流（未找到测试视频：$TEST_VIDEO，可选组件）"
+    return 1
+  fi
+  if is_run 'sintel\.mp4'; then echo -e "$OK  测试推流 已在运行"; return 0; fi
+  FF=$(command -v ffmpeg || echo /usr/local/bin/ffmpeg)
+  nohup "$FF" -re -stream_loop -1 -i "$TEST_VIDEO" \
     -c:v libx264 -preset ultrafast -tune zerolatency -c:a aac -listen 1 \
-    -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/test > /opt/sva-test/teststream.log 2>&1 &
+    -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/test > "$MEDIAMTX_DIR/teststream.log" 2>&1 &
   echo -e "$INFO 测试推流 启动中...（rtsp://127.0.0.1:8554/test）"
 }
 
@@ -104,10 +120,13 @@ cmd_start() {
   start_zlm;              wait_port 9992 "ZLMediaKit"  20
   echo -e "$INFO 第5步/7 AI 分析器..."
   start_analyzer;         wait_port 9993 "分析器"      30
-  echo -e "$INFO 第6步/7 虚拟摄像头(可选，测试流)..."
-  start_mediamtx;         wait_port 8554 "虚拟摄像头"  15
-  echo -e "$INFO 第7步/7 测试推流(可选)..."
-  start_teststream
+  echo -e "$INFO 第6步/7 可选测试组件（虚拟摄像头+推流，未安装自动跳过）..."
+  if [ -x "$MEDIAMTX_DIR/mediamtx" ]; then
+    start_mediamtx;         wait_port 8554 "虚拟摄像头"  15
+    start_teststream
+  else
+    echo -e "$INFO 跳过（未安装 mediamtx，需要测试流可自行放入 $MEDIAMTX_DIR/）"
+  fi
   echo "=================================================="
   echo -e "✅ 访问地址: ${GREEN}${WEB_URL}${NC}"
   echo -e "✅ 登录账号: admin / admin123"

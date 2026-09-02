@@ -241,6 +241,23 @@ echo "✅ 数据库导入完成（42 张表）"
 
 # ---------------- 8. 后端构建与部署 ----------------
 apt install -y openjdk-17-jdk maven
+
+# Maven 国内镜像（首次构建需下载依赖，中央仓库在国内不稳定；已有配置则不覆盖）
+if [ ! -f /root/.m2/settings.xml ]; then
+  mkdir -p /root/.m2
+  cat >/root/.m2/settings.xml <<'EOF'
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+  <mirrors>
+    <mirror>
+      <id>aliyun</id>
+      <mirrorOf>central</mirrorOf>
+      <url>https://maven.aliyun.com/repository/central</url>
+    </mirror>
+  </mirrors>
+</settings>
+EOF
+  echo "✅ 已配置 Maven 阿里云镜像"
+fi
 cd "$ROOT/SVA-backend"
 mvn clean package -Dmaven.test.skip=true
 mkdir -p /opt/SVA/backend

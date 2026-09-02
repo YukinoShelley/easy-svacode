@@ -59,6 +59,11 @@ fi
 if [ -f "$CLONE/SVA-web/dist/index.html" ]; then
   rm -rf /var/www/SVA-web/dist
   ln -s "$CLONE/SVA-web/dist" /var/www/SVA-web/dist
+  # 克隆位于家目录时保证 nginx(www-data) 可穿越（Ubuntu 家目录默认 750，否则 404）
+  case "$CLONE" in
+    "$HOME"/* | "$HOME") chmod o+x "$HOME" 2>/dev/null || true ;;
+  esac
+  chmod o+x "$CLONE" 2>/dev/null || true
   echo "✅ /var/www/SVA-web/dist -> SVA-web/dist"
   echo "   （改前端代码后：cd SVA-web && npm run build:prod）"
 else
