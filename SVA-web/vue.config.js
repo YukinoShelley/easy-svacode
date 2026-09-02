@@ -15,6 +15,8 @@ const port = process.env.port || process.env.npm_config_port || 80 // 端口
 //官方vue.config.js 参考文档 https://cli.vuejs.org/zh/config/#css-loaderoptions
 // 这里只列一部分，具体配置参考文档
 module.exports = {
+  // 让 babel 转译 @opentiny/fluent-editor（其依赖 quill 2.x 使用了 webpack4 无法解析的语法）
+  transpileDependencies: [/@opentiny/],
   // 部署生产环境和开发环境下的URL。
   // 默认情况下，Vue CLI 会假设你的应用是被部署在一个域名的根路径上
   // 例如 https://www.ruoyi.vip/。如果应用被部署在一个子路径上，你就需要用这个选项指定这个子路径。例如，如果你的应用被部署在 https://www.ruoyi.vip/admin/，则设置 baseUrl 为 /admin/。
