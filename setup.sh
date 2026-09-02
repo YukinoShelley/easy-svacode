@@ -107,10 +107,10 @@ apt install -y git cmake yasm libfaac-dev libmp3lame-dev libopus-dev libx264-dev
   libswscale-dev libgl1 libglib2.0-0
 
 cd /opt/easySVA-lib
-unzip -o nv-codec-headers.zip
+rm -rf nv-codec-headers && unzip -o nv-codec-headers.zip
 cd nv-codec-headers && make && make install
 cd /opt/easySVA-lib
-tar xf ffmpeg-6.1.4.tar.xz && cd ffmpeg-6.1.4
+rm -rf ffmpeg-6.1.4 && tar xf ffmpeg-6.1.4.tar.xz && cd ffmpeg-6.1.4
 
 if [ "$GPU" = "g" ]; then
   ./configure --prefix=/usr/local --enable-pic --enable-shared --enable-gpl \
@@ -130,10 +130,11 @@ ldconfig
 
 # ---------------- 4. OpenCV ----------------
 cd /opt/easySVA-lib
+rm -rf opencv-4.13.0 opencv opencv_contrib-4.13.0 opencv_contrib
 unzip -o opencv-4.13.0.zip
 unzip -o opencv_contrib-4.13.0.zip
-mv -f opencv-4.13.0 opencv 2>/dev/null || true
-mv -f opencv_contrib-4.13.0 opencv_contrib 2>/dev/null || true
+mv opencv-4.13.0 opencv
+mv opencv_contrib-4.13.0 opencv_contrib
 cd /opt/easySVA-lib/opencv && mkdir -p build && cd build
 
 if [ "$GPU" = "g" ]; then
