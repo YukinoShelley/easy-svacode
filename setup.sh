@@ -77,6 +77,9 @@ fi
 [ -d /opt/easySVA-lib ] || { echo "❌ 依赖包解压失败（/opt/easySVA-lib 不存在）"; exit 1; }
 
 # ---------------- 2. ONNX Runtime 与模型 ----------------
+# 清理旧 onnxruntime（支持脚本重跑）
+rm -rf /usr/local/onnxruntime /usr/local/onnxruntime-linux-x64-1.26.0 /usr/local/onnxruntime-linux-x64-gpu-1.26.0 2>/dev/null || true
+
 if [ "$GPU" = "g" ]; then
   echo "将安装 cuda13.1 耗时较长，请耐心等待"
   chmod +x /opt/easySVA-lib/cuda_13.1.2_590.48.01_linux.run
@@ -283,7 +286,7 @@ server {
         }
 }
 EOF
-nginx -t && systemctl restart nginx
+nginx -t && { systemctl restart nginx 2>/dev/null || nginx -s reload 2>/dev/null || service nginx restart 2>/dev/null || true; }
 
 # ---------------- 11. 开机自启（rc.local） ----------------
 mkdir -p /opt/SVA/mediaServer /opt/SVA/server

@@ -40,6 +40,30 @@ sudo ./setup.sh gpu        # 有 NVIDIA GPU（驱动 ≥ 590.48）用 GPU 版
 数据库：easySVA（root / easySVA.EZ）
 ```
 
+### 3. 文件位置清单（重要）
+
+**需要你手动放置的输入文件**（只有这一个）：
+
+| 文件 | 放到哪里 | 说明 |
+|---|---|---|
+| `Analyzer-lib.zip`（约 4.76GB） | 仓库内 **`deps/`** 目录 | 从夸克网盘或移交介质获取后放入即可，setup.sh 自动使用，**无需手动解压** |
+
+**安装后各组件落位**（setup.sh 自动完成，供排查使用）：
+
+| 路径 | 内容 |
+|---|---|
+| `/opt/easySVA-lib/` | 依赖包解压目录（由 deps/Analyzer-lib.zip 解压并改名而来） |
+| `/opt/SVA/models/` | YOLO 模型（yolo11n / yolo26s / yolo26s_miner） |
+| `/opt/SVA/backend/backend.jar` | 后端程序（手动启动：`cd /opt/SVA/backend && java -jar backend.jar`） |
+| `/opt/SVA/mediaServer/` | ZLMediaKit 可执行文件 + config.ini |
+| `/opt/SVA/server/Analyzer` | 分析器可执行文件 |
+| `/opt/SVA/config.json` | 分析器配置（host 已自动写入本机 IP） |
+| `/var/www/SVA-web/dist/` | 前端页面（Nginx root 指向这里） |
+| `/var/www/SVA-web/upload/` | 上传文件（`alarm/` 告警媒体、`storage/` 流媒体） |
+| `/etc/nginx/sites-enabled/default` | Nginx 站点配置（`/prod-api/`、`/websocket/` 反向代理） |
+| `/etc/rc.local` | 开机自启（后端 / ZLM / 分析器） |
+| MariaDB 数据库 `easySVA` | 业务数据库（42 表，root 密码 `easySVA.EZ`） |
+
 ## 三、使用流程
 
 1. 设备管理 → 添加设备（类型 `DIRECT`，URL 填 RTSP/HLS 地址，如 `rtsp://127.0.0.1:8554/test` 或 CCTV 测试流见 `docs/Vstream.txt`）；
