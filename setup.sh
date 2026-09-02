@@ -235,7 +235,8 @@ apt install -y openjdk-17-jdk maven
 cd "$ROOT/SVA-backend"
 mvn clean package -Dmaven.test.skip=true
 mkdir -p /opt/SVA/backend
-cp "$ROOT/SVA-backend/ruoyi-admin/target/ruoyi-admin.jar" /opt/SVA/backend/backend.jar
+# 软链接部署：克隆目录即开发仓库，改代码→编译→重启即生效（克隆目录勿删除/移动，否则重跑本脚本）
+ln -sf "$ROOT/SVA-backend/ruoyi-admin/target/ruoyi-admin.jar" /opt/SVA/backend/backend.jar
 
 # ---------------- 9. 前端构建与部署 ----------------
 apt install -y nginx-full
@@ -250,7 +251,7 @@ export NODE_OPTIONS=--openssl-legacy-provider
 npm run build:prod
 mkdir -p /var/www/SVA-web
 rm -rf /var/www/SVA-web/dist
-cp -r "$ROOT/SVA-web/dist" /var/www/SVA-web/
+ln -s "$ROOT/SVA-web/dist" /var/www/SVA-web/dist
 mkdir -p /var/www/SVA-web/upload/alarm /var/www/SVA-web/upload/storage
 
 # ---------------- 10. Nginx 配置 ----------------
@@ -301,7 +302,8 @@ nginx -t && { systemctl restart nginx 2>/dev/null || nginx -s reload 2>/dev/null
 # ---------------- 11. 开机自启（rc.local） ----------------
 mkdir -p /opt/SVA/mediaServer /opt/SVA/server
 cp "$ROOT/SVA-mediaServer/release/linux/Release/"* /opt/SVA/mediaServer/ -r
-cp "$ROOT/SVA-server/build/Analyzer" /opt/SVA/server/Analyzer
+ln -sf "$ROOT/SVA-mediaServer/release/linux/Release/MediaServer" /opt/SVA/mediaServer/MediaServer
+ln -sf "$ROOT/SVA-server/build/Analyzer" /opt/SVA/server/Analyzer
 
 cat <<EOF >/etc/rc.local
 #!/bin/sh -e
