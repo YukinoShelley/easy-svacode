@@ -348,6 +348,28 @@ public class DeploymentController
         return buildActionResult(true, "停止", analyzerResult.getMessage(), analyzerResult.getDetailMessage(), latest);
     }
 
+    @PostMapping("/{id}/live-output")
+    public AjaxResult liveOutput(@PathVariable("id") String id)
+    {
+        DeploymentTask record = deploymentTaskService.selectDeploymentTaskById(id);
+        if (record == null)
+        {
+            return AjaxResult.error("布控任务不存在");
+        }
+
+        String algorithmStreamUrl =
+            deploymentAnalyzerClient.buildAlgorithmStreamUrl(record.getDeviceId(), id);
+        if (StringUtils.isEmpty(algorithmStreamUrl))
+        {
+            return AjaxResult.error("未绑定可用ZLM/SVA服务器或配置缺失，无法生成算法输出流地址");
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("algorithmStreamUrl", algorithmStreamUrl);
+        data.put("algorithm_stream_url", algorithmStreamUrl);
+        return AjaxResult.success(data);
+    }
+
     @GetMapping("/{id}")
     public AjaxResult get(@PathVariable("id") String id)
     {

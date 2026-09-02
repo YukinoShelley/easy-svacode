@@ -45,18 +45,30 @@ namespace SVAAnalyzer
             return false;
         }
 
-        // 修改点1：先尝试硬件编码器，再回退到软件
-        const AVCodec *videoCodec = avcodec_find_encoder_by_name("h264_nvenc");
-        if (!videoCodec)
+        // 修改点1：先尝试硬件编码器 h264_nvenc；不可用或打开失败（无 GPU/驱动）时回退软件 H.264
+        const AVCodec *videoCodec = nullptr;
+        int encTry = 0;
+        while (true)
         {
-            LOGI("h264_nvenc not found, falling back to software H.264 encoder");
-            videoCodec = avcodec_find_encoder(AV_CODEC_ID_H264);
+            if (encTry == 0)
+            {
+                videoCodec = avcodec_find_encoder_by_name("h264_nvenc");
+                if (!videoCodec)
+                {
+                    LOGI("h264_nvenc not found, falling back to software H.264 encoder");
+                    videoCodec = avcodec_find_encoder(AV_CODEC_ID_H264);
+                }
+            }
+            else
+            {
+                LOGI("h264_nvenc open failed (no GPU/driver), falling back to software H.264 encoder");
+                videoCodec = avcodec_find_encoder(AV_CODEC_ID_H264);
+            }
             if (!videoCodec)
             {
                 LOGI("avcodec_find_encoder error: pushStreamUrl=%s", pushStreamUrl.data());
                 return false;
             }
-        }
         mVideoCodecCtx = avcodec_alloc_context3(videoCodec);
         if (!mVideoCodecCtx)
         {
@@ -161,9 +173,21 @@ namespace SVAAnalyzer
             av_dict_set(&video_codec_options, "tune", "zero-latency", 0);
         }
 
-        if (avcodec_open2(mVideoCodecCtx, videoCodec, &video_codec_options) < 0)
+            if (avcodec_open2(mVideoCodecCtx, videoCodec, &video_codec_options) >= 0)
+            {
+                break;
+            }
+            LOGI("avcodec_open2 error (try %d): pushStreamUrl=%s", encTry + 1, pushStreamUrl.data());
+            avcodec_free_context(&mVideoCodecCtx);
+            mVideoCodecCtx = nullptr;
+            encTry++;
+            if (encTry >= 2)
+            {
+                return false;
+            }
+        }
+        if (!mVideoCodecCtx)
         {
-            LOGI("avcodec_open2 error: pushStreamUrl=%s", pushStreamUrl.data());
             return false;
         }
         mVideoStream = avformat_new_stream(mFmtCtx, videoCodec);
