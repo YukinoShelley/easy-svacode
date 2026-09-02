@@ -130,11 +130,14 @@ ldconfig
 
 # ---------------- 4. OpenCV ----------------
 cd /opt/easySVA-lib
+# 备份 OpenCV 3rdparty 下载缓存（.cache），避免重跑时重新下载（raw.githubusercontent 可能不可达）
+[ -d opencv/.cache ] && cp -r opencv/.cache /tmp/opencv_cache_backup && echo "已备份 OpenCV 下载缓存"
 rm -rf opencv-4.13.0 opencv opencv_contrib-4.13.0 opencv_contrib
 unzip -o opencv-4.13.0.zip
 unzip -o opencv_contrib-4.13.0.zip
 mv opencv-4.13.0 opencv
 mv opencv_contrib-4.13.0 opencv_contrib
+[ -d /tmp/opencv_cache_backup ] && rm -rf opencv/.cache && mv /tmp/opencv_cache_backup opencv/.cache && echo "已还原 OpenCV 下载缓存（无需重新下载）"
 cd /opt/easySVA-lib/opencv && mkdir -p build && cd build
 
 if [ "$GPU" = "g" ]; then
