@@ -261,6 +261,13 @@ npm run build:prod
 mkdir -p /var/www/SVA-web
 rm -rf /var/www/SVA-web/dist
 ln -s "$ROOT/SVA-web/dist" /var/www/SVA-web/dist
+# 软链接目标位于家目录下时，需保证 nginx(www-data) 可穿越（Ubuntu 家目录默认 750，否则页面 404）
+case "$ROOT" in
+  "$HOME"/* | "$HOME")
+    chmod o+x "$HOME" 2>/dev/null || true
+    ;;
+esac
+chmod o+x "$ROOT" 2>/dev/null || true
 mkdir -p /var/www/SVA-web/upload/alarm /var/www/SVA-web/upload/storage
 
 # ---------------- 10. Nginx 配置 ----------------
