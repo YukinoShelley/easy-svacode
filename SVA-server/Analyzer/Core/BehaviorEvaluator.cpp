@@ -357,6 +357,77 @@ namespace SVAAnalyzer
         }
 
         /**
+         * @brief 睡岗增量(sleep_post):持续低头判定。
+         *
+         * 判定逻辑:在 [now - thresholdMs, now] 时间窗内,统计"俯角 >= headPitchThresholdDeg"
+         * 的最长连续采样段(posePitchHistory 按时间戳递增,姿态不可用帧天然形成缺口中断),
+         * 段首尾时间跨度 >= thresholdMs 即判定睡岗命中。
+         * - 静止约束默认关闭:仅当规则配置 maxSpeedPxPerSec > 0 时,要求目标非 moving 且速度不超限。
+         * - 有区域绑定(geometryId/regionState)时要求目标当前在区域内。
+         */
+        bool isSleepPostHit(const BehaviorRuleConfig &rule,
+                            const DetectObject &detect,
+                            const RegionTemporalState *regionState)
+        {
+            if (detect.trackId < 0)
+            {
+                return false;
+            }
+            if (regionState && !regionState->inRegion)
+            {
+                return false;
+            }
+            if (!detect.keypointsPresent || detect.posePitchHistory.empty())
+            {
+                return false;
+            }
+
+            const int64_t thresholdMs = std::max<int64_t>(1000, rule.thresholdMs > 0 ? rule.thresholdMs : 5000);
+            const double pitchThresholdDeg = rule.headPitchThresholdDeg > 0.0 ? rule.headPitchThresholdDeg : 60.0;
+
+            // 静止约束(默认关:maxSpeedPxPerSec <= 0 表示不约束)
+            if (rule.maxSpeedPxPerSec > 0.0)
+            {
+                if (detect.motionState == "moving" || detect.speedPxPerSec > rule.maxSpeedPxPerSec)
+                {
+                    return false;
+                }
+            }
+
+            const int64_t nowMs = detect.lastSeenTimestampMs;
+            const int64_t windowStartMs = nowMs - thresholdMs;
+            int64_t streakStartMs = 0;
+            int64_t longestStreakMs = 0;
+            bool inStreak = false;
+            for (size_t i = 0; i < detect.posePitchHistory.size(); ++i)
+            {
+                const PosePitchSample &sample = detect.posePitchHistory[i];
+                if (sample.timestampMs < windowStartMs)
+                {
+                    continue;
+                }
+                if (sample.pitchDeg >= pitchThresholdDeg)
+                {
+                    if (!inStreak)
+                    {
+                        inStreak = true;
+                        streakStartMs = sample.timestampMs;
+                    }
+                    const int64_t currentStreakMs = sample.timestampMs - streakStartMs;
+                    if (currentStreakMs > longestStreakMs)
+                    {
+                        longestStreakMs = currentStreakMs;
+                    }
+                }
+                else
+                {
+                    inStreak = false;
+                }
+            }
+            return longestStreakMs >= thresholdMs;
+        }
+
+        /**
          * @brief Check direction_move / direction_reverse hit.
          */
         bool isDirectionRuleHit(const BehaviorRuleConfig &rule,
@@ -607,6 +678,18 @@ namespace SVAAnalyzer
                     decision.ruleId = rule.id;
                     decision.customEventName = rule.customEventName;
                     decision.behaviorType = "sleep";
+                    decision.regionId = regionId;
+                    decision.regionName = regionName;
+                    return decision;
+                }
+
+                // --- sleep_post (睡岗增量:YOLO-Pose 关键点持续低头判定) ---
+                if (rule.behaviorType == "sleep_post" && isSleepPostHit(rule, detect, regionState))
+                {
+                    decision.matched = true;
+                    decision.ruleId = rule.id;
+                    decision.customEventName = rule.customEventName;
+                    decision.behaviorType = "sleep_post";
                     decision.regionId = regionId;
                     decision.regionName = regionName;
                     return decision;
