@@ -1,4 +1,4 @@
-﻿#ifndef ANALYZER_ALGORITHMONYOLO_H
+#ifndef ANALYZER_ALGORITHMONYOLO_H
 #define ANALYZER_ALGORITHMONYOLO_H
 
 #include <string>
@@ -15,6 +15,7 @@ namespace SVAAnalyzer
 	{
 		DenseWithNms,
 		DirectDetections,
+		DensePoseWithNms, // 睡岗增量(sleep-post):YOLO-Pose 1x56xN 关键点输出
 	};
 
 	/**
@@ -63,6 +64,8 @@ namespace SVAAnalyzer
 		void initPostprocessProfile(const std::string &algorithmCode);
 		bool decodeDenseOutputWithNms(const float *pdata, int imageWidth, int imageHeight, int paddedImageSize, std::vector<DetectObject> &detects);
 		bool decodeDirectDetections(const float *pdata, int imageWidth, int imageHeight, std::vector<DetectObject> &detects);
+		// 睡岗增量(sleep-post):YOLO-Pose 1x56xN = 框4 + 类别1(person) + 17关键点x3(x,y,conf)
+		bool decodeDensePoseWithNms(const float *pdata, int imageWidth, int imageHeight, int paddedImageSize, std::vector<DetectObject> &detects);
 	};
 	class AlgorithmOnYolo : public Algorithm
 	{
