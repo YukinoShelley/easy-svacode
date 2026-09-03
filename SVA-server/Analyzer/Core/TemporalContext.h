@@ -55,6 +55,13 @@ namespace SVAAnalyzer
         std::unordered_map<std::string, RegionTemporalState> regionStates;
         TemporalTrackLifecycleState lifeState = TemporalTrackLifecycleState::New;
         std::deque<TrackTrailPoint> trail;
+
+        // ===== 睡岗增量 (sleep-post / YOLO-Pose) =====
+        // 每 track 维护"最近关键点(EMA 平滑)+ 俯角历史",供 BehaviorEvaluator 的 sleep_post 规则做持续低头判定。
+        std::vector<PoseKeypoint> keypoints;          // EMA 平滑后的关键点(空 = 当前不可用)
+        bool keypointsPresent = false;                // 最近一帧关键点是否有效
+        float posePitchDeg = 0.0f;                    // 最近一帧平滑俯角
+        std::deque<PosePitchSample> posePitchHistory; // 俯角历史(≤64 条且 ≤10s,按时间戳递增;丢帧=连续段中断)
     };
 
     /**

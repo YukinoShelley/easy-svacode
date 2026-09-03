@@ -2,6 +2,7 @@
 #include "Algorithm.h"
 #include "Control.h"
 #include "Utils/GeometryUtils.h"
+#include "Utils/PoseUtils.h" // 睡岗增量:平滑后关键点 → 俯角
 
 #include <algorithm>
 #include <cmath>
@@ -17,6 +18,10 @@ namespace SVAAnalyzer
         static constexpr int64_t kMaxMissedMs = 4000;
         static constexpr size_t kMaxTrailPoints = 32;
         static constexpr float kStillSpeedThreshold = 12.0f;
+        // ===== 睡岗增量 (sleep-post) =====
+        static constexpr size_t kMaxPosePitchSamples = 64; // 俯角历史上限(条)
+        static constexpr int64_t kMaxPosePitchWindowMs = 10000; // 俯角历史窗口(ms)
+        static constexpr float kPoseKeypointEmaAlpha = 0.6f; // 关键点 EMA 平滑系数(与 box EMA 0.7 同风格)
 
         /**
          * @brief Simple IoU calculation between a detection box and a track box.
@@ -176,6 +181,73 @@ namespace SVAAnalyzer
         }
 
         /**
+         * @brief 睡岗增量:更新 track 的姿态状态(EMA 平滑关键点 → 重算俯角 → 采样入历史)。
+         *
+         * 仅在 detect 关键点有效时推进;某帧姿态不可用(遮挡/可见性不足)时不采样,
+         * 俯角历史自然出现"缺口"→ BehaviorEvaluator 的连续段判定自动中断,不会误累计低头时长。
+         */
+        static void updatePoseTemporalState(TemporalTrackState &track, const DetectObject &detect, int64_t timestampMs)
+        {
+            if (!detect.keypointsPresent || detect.keypoints.size() < 7)
+            {
+                // 清空平滑状态,避免用陈旧几何与下一帧做 EMA 混合;历史保留(缺口语义)
+                track.keypoints.clear();
+                track.keypointsPresent = false;
+                track.posePitchDeg = 0.0f;
+                return;
+            }
+
+            const size_t count = detect.keypoints.size();
+            if (track.keypoints.size() == count && track.keypointsPresent)
+            {
+                // 已有平滑状态 → EMA(坐标平滑,置信度取最新帧)
+                for (size_t i = 0; i < count; ++i)
+                {
+                    track.keypoints[i].x = kPoseKeypointEmaAlpha * detect.keypoints[i].x +
+                                           (1.0f - kPoseKeypointEmaAlpha) * track.keypoints[i].x;
+                    track.keypoints[i].y = kPoseKeypointEmaAlpha * detect.keypoints[i].y +
+                                           (1.0f - kPoseKeypointEmaAlpha) * track.keypoints[i].y;
+                    track.keypoints[i].confidence = detect.keypoints[i].confidence;
+                }
+            }
+            else
+            {
+                // 首帧/中断后重新可见 → 直接采用原始关键点
+                track.keypoints = detect.keypoints;
+            }
+
+            float pitchDeg = 0.0f;
+            float noseShoulderGap = 0.0f;
+            float visibilityAvg = 0.0f;
+            if (!computePosePitchDeg(track.keypoints, pitchDeg, noseShoulderGap, visibilityAvg))
+            {
+                // 平滑后可见性仍不足(理论上罕见:conf 未被 EMA 稀释)
+                track.keypointsPresent = false;
+                track.posePitchDeg = 0.0f;
+                return;
+            }
+
+            track.keypointsPresent = true;
+            track.posePitchDeg = pitchDeg;
+
+            PosePitchSample sample;
+            sample.timestampMs = timestampMs;
+            sample.pitchDeg = pitchDeg;
+            track.posePitchHistory.push_back(sample);
+
+            // 双上限:条数 64 / 时间窗 10s(按时间戳裁剪,低帧率下时长仍精确)
+            while (track.posePitchHistory.size() > kMaxPosePitchSamples)
+            {
+                track.posePitchHistory.pop_front();
+            }
+            while (!track.posePitchHistory.empty() &&
+                   timestampMs - track.posePitchHistory.front().timestampMs > kMaxPosePitchWindowMs)
+            {
+                track.posePitchHistory.pop_front();
+            }
+        }
+
+        /**
          * @brief Copy temporal fields from track state to detection object.
          * This enriches detection output with tracking metadata for downstream behavior analysis.
          */
@@ -196,6 +268,11 @@ namespace SVAAnalyzer
             detect.trackNew = trackNew;
             detect.regionStates = track.regionStates;
             detect.trail.assign(track.trail.begin(), track.trail.end());
+            // 睡岗增量:姿态状态回写(与 trail 同构,供 BehaviorEvaluator 读取)
+            detect.keypoints = track.keypoints;
+            detect.keypointsPresent = track.keypointsPresent;
+            detect.posePitchDeg = track.posePitchDeg;
+            detect.posePitchHistory.assign(track.posePitchHistory.begin(), track.posePitchHistory.end());
         }
 
         /**
@@ -259,6 +336,7 @@ namespace SVAAnalyzer
 
             appendTrail(track, detect.x1, detect.y1, detect.x2, detect.y2, timestampMs);
             updateRegionStates(track, control, timestampMs);
+            updatePoseTemporalState(track, detect, timestampMs); // 睡岗增量
             writeTemporalFields(track, detect, timestampMs, trackNew);
         }
 
@@ -294,6 +372,17 @@ namespace SVAAnalyzer
 
             appendTrail(track, detect.x1, detect.y1, detect.x2, detect.y2, timestampMs);
             updateRegionStates(track, control, timestampMs);
+            // 睡岗增量:新 track 直接采用本帧姿态并记录首条采样
+            track.keypoints = detect.keypoints;
+            track.keypointsPresent = detect.keypointsPresent;
+            track.posePitchDeg = detect.posePitchDeg;
+            if (track.keypointsPresent && track.posePitchDeg > 0.0f)
+            {
+                PosePitchSample sample;
+                sample.timestampMs = timestampMs;
+                sample.pitchDeg = track.posePitchDeg;
+                track.posePitchHistory.push_back(sample);
+            }
             writeTemporalFields(track, detect, timestampMs, true);
             return track;
         }
