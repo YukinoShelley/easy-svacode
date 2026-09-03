@@ -1,4 +1,4 @@
-﻿#include "Worker.h"
+#include "Worker.h"
 #include "Algorithm.h"
 #include "Analyzer.h"
 #include "AvPullStream.h"
@@ -1032,6 +1032,52 @@ namespace SVAAnalyzer
                             cv::rectangle(image, fps_bg_rect, overlayColor, -1);
                             cv::putText(image, fps_title, cv::Point(30, 120),
                                         cv::FONT_HERSHEY_COMPLEX, 1.0, textColor, 2, cv::LINE_AA);
+
+                            // ===== 睡岗增量(sleep-post):人体骨架 + 俯角叠加(仅关键点有效时绘制) =====
+                            {
+                                // COCO 17 点骨架连线(0-基,与 ultralytics Annotator.kpts 默认骨架一致)
+                                static const int kPoseLinks[][2] = {
+                                    {15, 13}, {13, 11}, {16, 14}, {14, 12}, {11, 12}, {5, 11}, {6, 12}, {5, 6},
+                                    {5, 7}, {6, 8}, {7, 9}, {8, 10}, {1, 2}, {0, 1}, {0, 2}, {1, 3}, {2, 4}, {3, 5}};
+                                const cv::Scalar kSkeletonColor(0, 215, 255); // 橙色 BGR
+                                const double kMinDrawConf = 0.3;
+                                const int kRadius = 3;
+                                for (const DetectObject &poseDet : happenDetects)
+                                {
+                                    if (!poseDet.keypointsPresent || poseDet.keypoints.size() < 17)
+                                    {
+                                        continue;
+                                    }
+                                    const auto &kpts = poseDet.keypoints;
+                                    for (const auto &link : kPoseLinks)
+                                    {
+                                        const PoseKeypoint &a = kpts[link[0]];
+                                        const PoseKeypoint &b = kpts[link[1]];
+                                        if (a.confidence < kMinDrawConf || b.confidence < kMinDrawConf)
+                                        {
+                                            continue;
+                                        }
+                                        cv::line(image, cv::Point(static_cast<int>(a.x), static_cast<int>(a.y)),
+                                                 cv::Point(static_cast<int>(b.x), static_cast<int>(b.y)),
+                                                 kSkeletonColor, 2, cv::LINE_AA);
+                                    }
+                                    for (const PoseKeypoint &kpt : kpts)
+                                    {
+                                        if (kpt.confidence >= kMinDrawConf)
+                                        {
+                                            cv::circle(image, cv::Point(static_cast<int>(kpt.x), static_cast<int>(kpt.y)),
+                                                       kRadius, kSkeletonColor, -1, cv::LINE_AA);
+                                        }
+                                    }
+                                    // 俯角数值(肩部上方)
+                                    char pitchBuf[24];
+                                    std::snprintf(pitchBuf, sizeof(pitchBuf), "pitch %.0f", poseDet.posePitchDeg);
+                                    const int textX = std::max(5, poseDet.x1);
+                                    const int textY = std::max(15, poseDet.y1 - 8);
+                                    cv::putText(image, pitchBuf, cv::Point(textX, textY),
+                                                cv::FONT_HERSHEY_SIMPLEX, 0.5, kSkeletonColor, 1, cv::LINE_AA);
+                                }
+                            }
                         }
 
                         auto fillFrameFromImage = [&](Frame *dst) {
