@@ -38,6 +38,7 @@ set(source
         Analyzer/Core/Utils/CalcuIOU.cpp
         Analyzer/Core/Utils/Request.cpp
         Analyzer/Core/Utils/GeometryUtils.cpp
+        Analyzer/Core/Utils/PoseUtils.cpp
         Analyzer/Core/Algorithm.cpp
         Analyzer/Core/AlgorithmOnYolo.cpp
         Analyzer/Core/Analyzer.cpp
@@ -54,6 +55,7 @@ set(source
         Analyzer/main.cpp)
 
 add_executable(Analyzer ${source})
+target_include_directories(Analyzer PRIVATE Analyzer/Core)
 if(SVA_ONNXRUNTIME_GPU)
   target_compile_definitions(Analyzer PRIVATE SVA_ONNXRUNTIME_GPU=1)
 else()
