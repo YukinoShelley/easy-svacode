@@ -1,4 +1,4 @@
-﻿#include "Analyzer.h"
+#include "Analyzer.h"
 #include "Algorithm.h"
 #include <json/json.h>
 #include "Scheduler.h"
@@ -34,6 +34,11 @@ namespace SVAAnalyzer
         if (algorithmCode == "on_yolo11n_80")
         {
             return mScheduler->on_yolo11n_80;
+        }
+        // 睡岗增量(sleep-post):YOLO-Pose 关键点模型(未加载时为 nullptr → 上层按"不支持的算法"跳过该任务)
+        if (algorithmCode == "on_yolo11n_pose_sleep" || algorithmCode == "ov_yolo11n_pose_sleep")
+        {
+            return mScheduler->on_yolo11n_pose_sleep;
         }
         if (algorithmCode == "on_yolo26n_80" || algorithmCode == "ov_yolo26n_80")
         {

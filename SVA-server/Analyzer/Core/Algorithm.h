@@ -1,4 +1,4 @@
-﻿#ifndef ANALYZER_ALGORITHM_H
+#ifndef ANALYZER_ALGORITHM_H
 #define ANALYZER_ALGORITHM_H
 
 #include <string>
@@ -85,6 +85,13 @@ namespace SVAAnalyzer
         int relationTargetTrackId = -1;
         std::string relationTargetClassName;
         double relationDistancePx = -1.0;
+
+        // ===== 睡岗检测增量 (sleep-post / YOLO-Pose) =====
+        // 新增字段全部带默认值:老算法(纯检测)永不写入,行为与改动前完全一致。
+        std::vector<PoseKeypoint> keypoints;          // 本帧 17 个人体关键点(COCO,像素坐标);空 = 非关键点检测
+        bool keypointsPresent = false;                // 本帧关键点是否有效(可见性达标才为 true)
+        float posePitchDeg = 0.0f;                    // 本帧头部俯角(0°=直立,180°=完全低头);仅 keypointsPresent 时有意义
+        std::deque<PosePitchSample> posePitchHistory; // track 俯角历史(≤64 条,按时间戳递增;由 TemporalProcessor 维护后随 detect 回写)
     };
 
     class Algorithm

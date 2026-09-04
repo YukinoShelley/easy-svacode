@@ -1,4 +1,4 @@
-﻿#ifndef ANALYZER_CONTROL_H
+#ifndef ANALYZER_CONTROL_H
 #define ANALYZER_CONTROL_H
 
 #include <string>
@@ -103,6 +103,8 @@ namespace SVAAnalyzer
 		double maxDisplacementPx = 0.0;
 		double directionAngleDeg = 0.0;
 		double directionToleranceDeg = 30.0;
+		// ===== 睡岗增量 (sleep_post) =====
+		double headPitchThresholdDeg = 60.0; // 低头俯角阈值(度),0/未配置由默认值块兜底
 		std::string sequenceId;
 		int stageIndex = 0;
 		int64_t stageTimeoutMs = 0;
@@ -763,6 +765,15 @@ namespace SVAAnalyzer
 				{
 					rule.maxSpeedPxPerSec = speedThreshold;
 				}
+				// ===== 睡岗增量 (sleep_post) =====
+				{
+					double pitchThreshold = 0.0;
+					if (tryParseJsonNumber(item["headPitchThresholdDeg"], pitchThreshold) ||
+						tryParseJsonNumber(item["pitchThresholdDeg"], pitchThreshold))
+					{
+						rule.headPitchThresholdDeg = pitchThreshold;
+					}
+				}
 				double directionAngleDeg = 0.0;
 				if (tryParseJsonNumber(item["directionAngleDeg"], directionAngleDeg) ||
 					tryParseJsonNumber(item["directionAngle"], directionAngleDeg) ||
@@ -919,7 +930,13 @@ namespace SVAAnalyzer
 			for (size_t i = 0; i < behaviorRules.size(); ++i)
 			{
 				BehaviorRuleConfig &rule = behaviorRules[i];
+				const std::string rawBehaviorType = rule.behaviorType; // 睡岗增量:保留原始类型供白名单外补救
 				rule.behaviorType = normalizeBehaviorTypeValue(rule.behaviorType);
+				// 睡岗增量(sleep_post):白名单(305-317 行)未收录的新类型会被规范化置空,在此补救(不改白名单行)
+				if (rule.behaviorType.empty() && rawBehaviorType == "sleep_post")
+				{
+					rule.behaviorType = rawBehaviorType;
+				}
 				if (rule.behaviorType.empty())
 				{
 					continue;
@@ -1053,6 +1070,19 @@ namespace SVAAnalyzer
 						rule.maxSpeedPxPerSec = std::max(0.1, std::min(10000.0, rule.maxSpeedPxPerSec > 0.0 ? rule.maxSpeedPxPerSec : 6.0));
 						rule.maxDisplacementPx = std::max(1.0, std::min(10000.0, rule.maxDisplacementPx > 0.0 ? rule.maxDisplacementPx : 48.0));
 						rule.distanceThresholdPx = std::max(0.5, std::min(8.0, rule.distanceThresholdPx > 0.0 ? rule.distanceThresholdPx : 1.2));
+					}
+					// ===== 睡岗增量 (sleep_post) =====
+					else if (rule.behaviorType == "sleep_post")
+					{
+						// 持续低头时长默认 5000ms;俯角阈值默认 60°;静止约束默认关闭(配置 maxSpeedPxPerSec 才生效)
+						rule.thresholdMs = std::max<int64_t>(1000, std::min<int64_t>(3600000,
+							rule.thresholdMs > 0 ? rule.thresholdMs : 5000));
+						rule.thresholdCount = 0;
+						rule.maxSpeedPxPerSec = std::min(10000.0, rule.maxSpeedPxPerSec); // 0 = 不约束(保持默认关)
+						rule.maxDisplacementPx = 0.0;
+						rule.distanceThresholdPx = 0.0;
+						rule.headPitchThresholdDeg = std::max(20.0, std::min(170.0,
+							rule.headPitchThresholdDeg > 0.0 ? rule.headPitchThresholdDeg : 60.0));
 					}
 					else if (rule.behaviorType == "count_threshold")
 					{

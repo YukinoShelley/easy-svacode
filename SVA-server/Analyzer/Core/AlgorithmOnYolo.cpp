@@ -1,7 +1,8 @@
-﻿#include "AlgorithmOnYolo.h"
+#include "AlgorithmOnYolo.h"
 #include "Config.h"
 #include "Utils/Log.h"
 #include "Utils/Common.h"
+#include "Utils/PoseUtils.h" // 睡岗增量:关键点 → 俯角
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -164,6 +165,15 @@ namespace SVAAnalyzer
                  static_cast<long long>(mOutputDims[2]),
                  mActiveProvider.c_str());
         }
+        else if (mOutputDim == 56 && mDecoder == YoloOutputDecoder::DensePoseWithNms)
+        {
+            // 睡岗增量(sleep-post):1x56xN 关键点输出,profile 已选定 pose 解码器,此处仅确认维度
+            LOGI("AlgorithmOnYolo output dims=[%lld,%lld,%lld] decoder=dense_pose_with_nms provider=%s",
+                 static_cast<long long>(mOutputDims[0]),
+                 static_cast<long long>(mOutputDims[1]),
+                 static_cast<long long>(mOutputDims[2]),
+                 mActiveProvider.c_str());
+        }
         else
         {
             mDecoder = YoloOutputDecoder::DenseWithNms;
@@ -198,6 +208,13 @@ namespace SVAAnalyzer
         {
             mDecoder = YoloOutputDecoder::DirectDetections;
             LOGI("AlgorithmOnYolo profile=%s decoder=direct_detections preprocess=direct_resize_bgr score=0.25", algorithmCode.data());
+            return;
+        }
+        // 睡岗增量(sleep-post):YOLO-Pose 关键点模型,预处理与 DenseWithNms 相同(方形 pad + RGB)
+        if (algorithmCode == "on_yolo11n_pose_sleep" || algorithmCode == "ov_yolo11n_pose_sleep")
+        {
+            mDecoder = YoloOutputDecoder::DensePoseWithNms;
+            LOGI("AlgorithmOnYolo profile=%s decoder=dense_pose_with_nms preprocess=square_rgb score=0.50 nms=0.50", algorithmCode.data());
             return;
         }
         LOGI("AlgorithmOnYolo profile=%s decoder=dense_with_nms preprocess=square_rgb score=0.50 nms=0.50", algorithmCode.data());
@@ -301,6 +318,123 @@ namespace SVAAnalyzer
         return true;
     }
 
+    // ===== 睡岗增量(sleep-post):YOLO-Pose 关键点解码 =====
+    // 输出布局(1x56xN,参照 ultralytics nn/modules/head.py class Pose):
+    //   每 anchor 56 列 = 框4(cx,cy,w,h) + 类别1(person) + 17关键点 x 3(x,y,conf)
+    bool OnnxRuntimeEngine::decodeDensePoseWithNms(const float *pdata, int imageWidth, int imageHeight, int paddedImageSize, std::vector<DetectObject> &detects)
+    {
+        constexpr int kPoseAnchorStride = 56; // 4 + 1 + 17*3
+        constexpr int kPoseKptCount = 17;
+        constexpr int kPoseKptStart = 5;
+        if (mOutputDim != kPoseAnchorStride)
+        {
+            LOGE("AlgorithmOnYolo dense_pose invalid output dim=%d, expect 56", mOutputDim);
+            return false;
+        }
+
+        float score_threshold = 0.5; // 与 DenseWithNms 老解码器一致(initPostprocessProfile 日志)
+        float nms_threshold = 0.5;
+        float x_factor = static_cast<float>(paddedImageSize) / static_cast<float>(mInputWidth);
+        float y_factor = static_cast<float>(paddedImageSize) / static_cast<float>(mInputHeight);
+
+        std::vector<cv::Rect> boxes;
+        std::vector<int> classIds;
+        std::vector<float> confidences;
+
+        for (int i = 0; i < mOutputRow; i++)
+        {
+            const float *anchor = pdata + static_cast<size_t>(i) * kPoseAnchorStride;
+            const float cx = anchor[0];
+            const float cy = anchor[1];
+            const float ow = anchor[2];
+            const float oh = anchor[3];
+            const float objectness = anchor[kPoseKptStart - 1]; // col4 = person 类别分
+            if (!std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(ow) || !std::isfinite(oh) || !std::isfinite(objectness))
+            {
+                continue;
+            }
+            if (ow <= 0.0f || oh <= 0.0f || objectness <= score_threshold)
+            {
+                continue;
+            }
+
+            int left = static_cast<int>((cx - 0.5f * ow) * x_factor);
+            int top = static_cast<int>((cy - 0.5f * oh) * y_factor);
+            int right = static_cast<int>((cx + 0.5f * ow) * x_factor);
+            int bottom = static_cast<int>((cy + 0.5f * oh) * y_factor);
+
+            left = std::max(0, std::min(left, imageWidth - 1));
+            top = std::max(0, std::min(top, imageHeight - 1));
+            right = std::max(0, std::min(right, imageWidth));
+            bottom = std::max(0, std::min(bottom, imageHeight));
+            if (right <= left || bottom <= top)
+            {
+                continue;
+            }
+
+            boxes.emplace_back(left, top, right - left, bottom - top);
+            classIds.push_back(0); // pose 模型类别恒为 person(id 0)
+            confidences.push_back(objectness);
+        }
+
+        // NMS 复用与 DenseWithNms 相同的实现
+        std::vector<int> indexes;
+        cv::dnn::NMSBoxes(boxes, confidences, score_threshold, nms_threshold, indexes);
+        for (size_t i = 0; i < indexes.size(); i++)
+        {
+            const int index = indexes[i];
+            if (index < 0 || index >= static_cast<int>(boxes.size()))
+            {
+                continue;
+            }
+            const cv::Rect &box = boxes[index];
+            const float *anchor = pdata + static_cast<size_t>(index) * kPoseAnchorStride;
+
+            DetectObject detect;
+            detect.x1 = box.x;
+            detect.y1 = box.y;
+            detect.x2 = box.x + box.width;
+            detect.y2 = box.y + box.height;
+            detect.class_id = 0;
+            detect.class_name = (!mClassNames.empty()) ? mClassNames[0] : "person";
+            detect.class_score = confidences[index];
+
+            // 关键点:模型输入空间(0..640) → 原图像素(与框同一 pad 比例),裁剪到帧内,conf 原样保留
+            detect.keypoints.clear();
+            detect.keypoints.reserve(kPoseKptCount);
+            for (int k = 0; k < kPoseKptCount; k++)
+            {
+                const float *kpt = anchor + kPoseKptStart + static_cast<size_t>(k) * 3;
+                PoseKeypoint point;
+                point.x = kpt[0] * x_factor;
+                point.y = kpt[1] * y_factor;
+                point.confidence = kpt[2];
+                if (std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.confidence))
+                {
+                    point.x = std::max(0.0f, std::min(point.x, static_cast<float>(imageWidth - 1)));
+                    point.y = std::max(0.0f, std::min(point.y, static_cast<float>(imageHeight - 1)));
+                }
+                else
+                {
+                    point.x = 0.0f;
+                    point.y = 0.0f;
+                    point.confidence = 0.0f;
+                }
+                detect.keypoints.push_back(point);
+            }
+
+            // 姿态几何事实(俯角/可见性),不含任何规则阈值
+            float pitchDeg = 0.0f;
+            float noseShoulderGap = 0.0f;
+            float visibilityAvg = 0.0f;
+            detect.keypointsPresent = computePosePitchDeg(detect.keypoints, pitchDeg, noseShoulderGap, visibilityAvg);
+            detect.posePitchDeg = pitchDeg;
+
+            detects.push_back(detect);
+        }
+        return true;
+    }
+
     bool OnnxRuntimeEngine::decodeDirectDetections(const float *pdata, int imageWidth, int imageHeight, std::vector<DetectObject> &detects)
     {
         if (mOutputDims.size() < 3)
@@ -396,7 +530,7 @@ namespace SVAAnalyzer
             image.copyTo(inputImage(roi));
         }
 
-        const bool swapRB = (mDecoder == YoloOutputDecoder::DenseWithNms);
+        const bool swapRB = (mDecoder != YoloOutputDecoder::DirectDetections); // Dense/DensePose 均需 BGR→RGB(等价泛化,老解码器语义不变)
         cv::Mat blob = cv::dnn::blobFromImage(inputImage, 1 / 255.0, cv::Size(mInputWidth, mInputHeight), cv::Scalar(0, 0, 0), swapRB, false);
         size_t tpixels = static_cast<size_t>(mInputHeight * mInputWidth * 3);
         std::array<int64_t, 4> input_shape_info{1, 3, mInputHeight, mInputWidth};
@@ -423,6 +557,11 @@ namespace SVAAnalyzer
         if (mDecoder == YoloOutputDecoder::DirectDetections)
         {
             return decodeDirectDetections(pdata, image_w, image_h, detects);
+        }
+        // 睡岗增量(sleep-post):YOLO-Pose 关键点输出
+        if (mDecoder == YoloOutputDecoder::DensePoseWithNms)
+        {
+            return decodeDensePoseWithNms(pdata, image_w, image_h, paddedImageSize, detects);
         }
         return decodeDenseOutputWithNms(pdata, image_w, image_h, paddedImageSize, detects);
     }

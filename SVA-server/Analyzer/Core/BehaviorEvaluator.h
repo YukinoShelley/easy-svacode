@@ -63,6 +63,7 @@ namespace SVAAnalyzer
      * | low_speed       | 在区域内低速移动               | trail + speed     |
      * | loitering       | 在区域内小范围徘徊             | trail             |
      * | sleep           | 静止 + 宽高比异常（躺卧）      | motionState + box size |
+     * | sleep_post      | 持续低头超过阈值(俯角+时长)   | posePitchHistory + keypoints |
      * | direction_move  | 运动方向匹配指定角度           | trail + speed     |
      * | direction_reverse| 运动方向与指定角度相反        | trail + speed     |
      * 

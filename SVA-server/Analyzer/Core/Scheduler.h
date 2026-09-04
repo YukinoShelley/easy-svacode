@@ -1,4 +1,4 @@
-﻿#ifndef ANALYZER_SCHEDULER_H
+#ifndef ANALYZER_SCHEDULER_H
 #define ANALYZER_SCHEDULER_H
 #include <map>
 #include <mutex>
@@ -290,6 +290,8 @@ namespace SVAAnalyzer
 		 */
 		Algorithm *on_yolo11n_80 = nullptr;
 		Algorithm *on_yolo26n_80 = nullptr;
+		// ===== 睡岗增量 (sleep-post / YOLO-Pose) =====
+		Algorithm *on_yolo11n_pose_sleep = nullptr; // 可选:模型缺失时为 nullptr,布控使用该算法时按"不支持的算法"跳过
 		void loop();
 
 		void setState(bool state);

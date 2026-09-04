@@ -1,4 +1,4 @@
-﻿#include "Scheduler.h"
+#include "Scheduler.h"
 #include "Config.h"
 #include "Control.h"
 #include "Worker.h"
@@ -141,6 +141,11 @@ namespace SVAAnalyzer
             delete on_yolo26n_80;
             on_yolo26n_80 = nullptr;
         }
+        // 睡岗增量(sleep-post):释放可选姿态模型(防泄漏)
+        if (on_yolo11n_pose_sleep) {
+            delete on_yolo11n_pose_sleep;
+            on_yolo11n_pose_sleep = nullptr;
+        }
 
         clearAlarmQueue();
         clearDetectFrameQueue();
@@ -186,6 +191,21 @@ namespace SVAAnalyzer
         LOGI("初始化 on_yolo26n_80 (yolo26s.onnx)");
         modelPath = mConfig->modelDir + "/yolo26s.onnx";
         on_yolo26n_80 = new AlgorithmOnYolo(mConfig, modelPath, classNames, "on_yolo26n_80");
+
+        // ===== 睡岗增量 (sleep-post / YOLO-Pose) =====
+        // 可选模型:缺失/损坏仅告警,不影响分析器启动与原有算法(增量原则 R3)
+        try
+        {
+            std::string poseModelPath = mConfig->modelDir + "/yolo11n_pose_sleep.onnx";
+            std::vector<std::string> poseClassNames = {"person"};
+            LOGI("初始化 on_yolo11n_pose_sleep (%s)", poseModelPath.c_str());
+            on_yolo11n_pose_sleep = new AlgorithmOnYolo(mConfig, poseModelPath, poseClassNames, "on_yolo11n_pose_sleep");
+        }
+        catch (const std::exception &e)
+        {
+            LOGE("睡岗模型加载失败(不影响启动): %s", e.what());
+            on_yolo11n_pose_sleep = nullptr;
+        }
 
         LOGI("initAlgorithm() end - total ONNX models loaded: 2");
         return true;
