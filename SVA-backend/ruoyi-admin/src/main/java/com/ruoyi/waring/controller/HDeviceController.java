@@ -86,6 +86,78 @@ public class HDeviceController extends BaseController {
     }
 
     /**
+     * GB28181: 查看 ZLM 上已注册的国标通道(媒体能力未启用时返回友好提示)
+     */
+    @PreAuthorize("@ss.hasPermi('waring:device:query')")
+    @GetMapping("/gb/remote-channels")
+    public AjaxResult gbRemoteChannels() {
+        return success(hDeviceService.getGbRemoteChannels());
+    }
+
+    /**
+     * GB28181: 一键把 ZLM 已注册国标通道导入/同步到设备表
+     */
+    @PreAuthorize("@ss.hasPermi('waring:device:add')")
+    @PostMapping("/gb/import")
+    public AjaxResult gbImport() {
+        return success(hDeviceService.importGbDevices());
+    }
+
+    /**
+     * GB28181: 手动触发国标设备上下线状态同步
+     */
+    @PreAuthorize("@ss.hasPermi('waring:device:query')")
+    @PostMapping("/gb/status/sync")
+    public AjaxResult gbSyncStatus() {
+        return success(hDeviceService.syncGbOnlineStatus());
+    }
+
+    /**
+     * GB28181: 国标设备实时播放地址(契约:/index/api/gb/play)
+     */
+    @PreAuthorize("@ss.hasPermi('waring:device:query')")
+    @GetMapping("/live/gb/{apeId}")
+    public AjaxResult getGbLiveUrl(@PathVariable String apeId) {
+        return success(hDeviceService.getGbLiveUrl(apeId));
+    }
+
+    /**
+     * GB28181: 上下线回调(预留)。流媒体侧(媒体组)在设备注册/注销/保活失败时
+     * 回调本接口,后端据此更新 h_device.is_online。无需登录(已在 SecurityConfig 放行)。
+     * body: {"channelId":"34020000001320000001","online":"1","event":"register|unregister|keepalive"}
+     */
+    @PostMapping("/gb/notify")
+    public AjaxResult gbNotify(@RequestBody(required = false) Map<String, Object> body) {
+        if (body == null || body.isEmpty()) {
+            return AjaxResult.error("请求体为空");
+        }
+        Object channelObj = body.getOrDefault("channelId", body.get("apeId"));
+        if (channelObj == null) {
+            return AjaxResult.error("缺少 channelId/apeId");
+        }
+        String channelId = String.valueOf(channelObj);
+        String online = "unregister".equalsIgnoreCase(String.valueOf(body.getOrDefault("event", "")))
+            ? "0"
+            : "1";
+        Object onlineObj = body.get("online");
+        if (onlineObj != null) {
+            String v = String.valueOf(onlineObj).trim().toLowerCase();
+            online = ("1".equals(v) || "true".equals(v)) ? "1" : "0";
+        }
+        HDevice device = hDeviceService.selectDeviceByApeId(channelId);
+        if (device == null) {
+            // 通道尚未导入设备表时忽略(可先一键导入)
+            return success("channel not imported, ignore");
+        }
+        int rows = hDeviceService.updateGbOnlineState(channelId, online);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("channelId", channelId);
+        data.put("online", online);
+        data.put("updated", rows);
+        return success(data);
+    }
+
+    /**
      * 新增设备
      */
     @PreAuthorize("@ss.hasPermi('waring:device:add')")

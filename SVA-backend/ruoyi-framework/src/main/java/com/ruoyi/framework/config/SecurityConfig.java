@@ -102,6 +102,7 @@ public class SecurityConfig
                 // 对于登录login 注册register 验证码captchaImage 允许匿名访问
                 requests.requestMatchers("/login", "/register", "/captchaImage").permitAll()
                     .requestMatchers("/waring/waring/addWaring", "/waring/waring/importTemplate", "/waring/waring/addFromSvaSimple", "/waring/waring/addFromSvaSimple/", "/waring/waring/addFromSvaSimple/**", "/waring/waring/addFromSvaMediaCallback", "/waring/waring/addFromSvaMediaCallback/", "/waring/waring/addFromSvaMediaCallback/**").permitAll()
+                    .requestMatchers("/waring/device/gb/notify", "/waring/device/gb/notify/**").permitAll()
                     .requestMatchers("/token/**", "/websocket/**").permitAll()
                     // 静态资源，可匿名访问
                     .requestMatchers(HttpMethod.GET, "/", "/*.html", "/**.html", "/**.css", "/**.js", "/profile/**").permitAll()

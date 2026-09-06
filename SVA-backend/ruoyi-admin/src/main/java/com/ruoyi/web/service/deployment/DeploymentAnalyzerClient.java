@@ -73,6 +73,12 @@ public class DeploymentAnalyzerClient
         String apeId = task.getDeviceId();
         String streamUrl = buildStreamUrl(bindingConfig, apeId);
 
+        // GB28181/RTSP 来源标注(仅新增字段,向后兼容;布控逻辑与原一致:
+        // 国标与 RTSP 设备统一通过 ZLM 上的 streamApp/streamName 出流后送入分析器)
+        HDevice taskDevice = StringUtils.isBlank(apeId) ? null : hDeviceMapper.selectDeviceByApeId(apeId);
+        String sourceType = (taskDevice != null && "GB28181".equalsIgnoreCase(taskDevice.getDevice_type()))
+            ? "GB28181" : "RTSP";
+
         boolean pushStream = Boolean.TRUE.equals(task.getPushEnabled());
         boolean frontendOverlayEnabled = Boolean.TRUE.equals(task.getFrontendOverlayEnabled());
         String pushStreamUrl = buildPushStreamUrl(bindingConfig, task.getDeploymentId());
@@ -93,6 +99,8 @@ public class DeploymentAnalyzerClient
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("code", task.getDeploymentId());
+        payload.put("sourceType", sourceType);
+        payload.put("deviceType", sourceType);
         payload.put("streamCode", apeId);
         payload.put("streamApp", bindingConfig.zlmApp);
         payload.put("streamName", apeId);
@@ -181,13 +189,29 @@ public class DeploymentAnalyzerClient
         {
             for (DeploymentTaskAlgorithm item : task.getAlgorithmTasks())
             {
-                if (item != null && StringUtils.isNotBlank(item.getAlgorithmCode()) && item.getTargetCodes() != null && !item.getTargetCodes().isEmpty())
+                if (item == null || StringUtils.isBlank(item.getAlgorithmCode()))
+                {
+                    continue;
+                }
+                boolean hasTargets = item.getTargetCodes() != null && !item.getTargetCodes().isEmpty();
+                if (hasTargets || isSpecialAlgorithm(item.getAlgorithmCode()))
                 {
                     return item;
                 }
             }
         }
         return null;
+    }
+
+    /** 特殊算法(如姿态/睡岗类)无需目标物类别,直接按 code 识别,便于前端/算法组扩展 */
+    private boolean isSpecialAlgorithm(String algorithmCode)
+    {
+        if (algorithmCode == null)
+        {
+            return false;
+        }
+        String code = algorithmCode.toLowerCase();
+        return code.contains("pose") || code.endsWith("_sleep") || code.equals("on_yolopose_sleep");
     }
 
     private List<Map<String, Object>> buildAlgorithmTasks(DeploymentTask task)
@@ -207,12 +231,28 @@ public class DeploymentAnalyzerClient
         for (DeploymentTaskAlgorithm item : sourceTasks)
         {
             List<String> targetCodes = item == null ? Collections.<String>emptyList() : item.getTargetCodes();
-            if (item == null || StringUtils.isBlank(item.getAlgorithmCode()) || targetCodes == null || targetCodes.isEmpty())
+            boolean special = item != null && isSpecialAlgorithm(item.getAlgorithmCode());
+            if (item == null || StringUtils.isBlank(item.getAlgorithmCode())
+                || targetCodes == null || (targetCodes.isEmpty() && !special))
             {
                 continue;
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("algorithmCode", item.getAlgorithmCode());
+            if (StringUtils.isNotBlank(item.getParamsJson()))
+            {
+                // 预留:算法自定义参数透传(睡岗角度/时长等),JSON 可解析则给对象,否则给原文
+                try
+                {
+                    JsonNode paramsNode = OBJECT_MAPPER.readTree(item.getParamsJson());
+                    row.put("params", OBJECT_MAPPER.convertValue(paramsNode, Object.class));
+                }
+                catch (Exception ignore)
+                {
+                    row.put("params", item.getParamsJson());
+                }
+                row.put("paramsJson", item.getParamsJson());
+            }
             if (item.getDetectFps() != null)
             {
                 row.put("detectFps", item.getDetectFps());

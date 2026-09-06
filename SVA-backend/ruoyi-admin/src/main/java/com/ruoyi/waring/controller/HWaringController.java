@@ -91,6 +91,8 @@ public class HWaringController extends BaseController implements SvaDetectEventC
     private static final String SVA_RELATION_APART_ALARM_TYPE_NAME = "目标远离告警";
     private static final String SVA_RELATION_NOT_CONTAINS_ALARM_TYPE = "SVA_RELATION_NOT_CONTAINS";
     private static final String SVA_RELATION_NOT_CONTAINS_ALARM_TYPE_NAME = "目标未包含告警";
+    private static final String SVA_SLEEP_ALARM_TYPE = "SVA_SLEEP";
+    private static final String SVA_SLEEP_ALARM_TYPE_NAME = "睡岗告警";
 
     @Autowired
     private RestTemplate restTemplate;
@@ -675,7 +677,9 @@ public class HWaringController extends BaseController implements SvaDetectEventC
         update.setSva_event_state(eventState);
         update.setSva_behavior_type(behaviorType);
         update.setSva_rule_id(ruleId.isEmpty() ? null : ruleId);
-        update.setAlarm_type_name(customAlarmTypeName.isEmpty() ? null : customAlarmTypeName);
+        update.setAlarm_type_name("sleep".equals(behaviorType)
+            ? SVA_SLEEP_ALARM_TYPE_NAME   // Y1: 睡岗告警名不被自定义事件名覆盖(含 update/end 回写)
+            : (customAlarmTypeName.isEmpty() ? null : customAlarmTypeName));
         update.setSva_business_event_id(businessEventId);
         update.setSva_business_event_name(customAlarmTypeName.isEmpty() ? null : customAlarmTypeName);
         update.setSva_business_template_id(businessTemplateId.isEmpty() ? null : businessTemplateId);
@@ -716,9 +720,12 @@ public class HWaringController extends BaseController implements SvaDetectEventC
         HWaring waring = new HWaring();
         waring.setId(eventId);
         waring.setAlarm_type(alarmTypeMeta.alarmType);
-        String resolvedAlarmTypeName = customAlarmTypeName == null || customAlarmTypeName.trim().isEmpty()
+        // Y1: 睡岗告警统一展示元数据名("睡岗告警"), 不被自定义业务事件名(如 "sleep警告1")覆盖
+        String resolvedAlarmTypeName = SVA_SLEEP_ALARM_TYPE.equals(alarmTypeMeta.alarmType)
             ? alarmTypeMeta.alarmTypeName
-            : customAlarmTypeName.trim();
+            : (customAlarmTypeName == null || customAlarmTypeName.trim().isEmpty()
+                ? alarmTypeMeta.alarmTypeName
+                : customAlarmTypeName.trim());
         waring.setAlarm_type_name(resolvedAlarmTypeName);
         waring.setAlarm_level("3");
         waring.setAlarm_level_name("一般");
@@ -1243,7 +1250,7 @@ public class HWaringController extends BaseController implements SvaDetectEventC
             || "count_threshold".equals(normalized) || "occupancy".equals(normalized)
             || "direction_move".equals(normalized) || "direction_reverse".equals(normalized)
             || "relation_near".equals(normalized) || "relation_apart".equals(normalized)
-            || "relation_not_contains".equals(normalized)) {
+            || "relation_not_contains".equals(normalized) || "sleep".equals(normalized)) {
             return normalized;
         }
         return "";
@@ -1291,6 +1298,9 @@ public class HWaringController extends BaseController implements SvaDetectEventC
         }
         if ("relation_not_contains".equals(behaviorType)) {
             return new AlarmTypeMeta(SVA_RELATION_NOT_CONTAINS_ALARM_TYPE, SVA_RELATION_NOT_CONTAINS_ALARM_TYPE_NAME);
+        }
+        if ("sleep".equals(behaviorType)) {
+            return new AlarmTypeMeta(SVA_SLEEP_ALARM_TYPE, SVA_SLEEP_ALARM_TYPE_NAME);
         }
         return null;
     }
