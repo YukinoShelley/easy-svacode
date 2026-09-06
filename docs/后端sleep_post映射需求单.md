@@ -67,3 +67,7 @@ VALUES (3,'on_yolo11n_pose_sleep','睡岗检测(yolo11n-pose)','',1,'person','�
 - **dpp/algorithm 分支**:附带一个 HWaringController 补丁(`sleep`→`SVA_SLEEP`/`睡岗告警`,白名单放行 sleep、告警名防覆盖)。
 - **建议最终方案(最小改动、两处兼容)**:把 algorithm 分支补丁同款逻辑扩为同时放行 `sleep_post`——即新增 `"sleep_post"` 到 normalize 白名单并映射到同一组常量 `SVA_SLEEP`/`SVA_SLEEP_ALARM_TYPE_NAME="睡岗告警"`(alarm_type 统一 SVA_SLEEP,前端/统计无需新增类型)。分析器以 `sleep_post` 事件上报,旧 `sleep` 规则(横躺)事件也可入库。
 - 若坚持独立类型,按第二节 SVA_SLEEP_POST 方案实施亦可;分析器侧两者均可接受(只认 behaviorType 字符串)。
+
+## 八、最终裁定(2026-09-06):以算法部分接口为主,本需求单关闭
+
+分析器睡岗规则对外事件类型已统一为 `sleep`(不再外发 sleep_post);algorithm 分支的 HWaringController 补丁(sleep→SVA_SLEEP/睡岗告警,白名单放行 sleep)已并入 integration-all。**后端无需新增 SVA_SLEEP_POST**,本单仅保留历史参考;如后续要区分"姿态睡岗"与"横躺",可再议(建议沿用 ruleId 区分)。

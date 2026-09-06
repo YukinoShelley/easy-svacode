@@ -692,12 +692,14 @@ namespace SVAAnalyzer
                 }
 
                 // --- sleep_post (睡岗增量:YOLO-Pose 关键点持续低头判定) ---
+                // 规则类型名 sleep_post 为内部配置契约;对外事件类型按"算法部分接口为主"输出 sleep
+                // (后端白名单/告警映射走 platform 既有 sleep→SVA_SLEEP/睡岗告警,见 algorithm 分支补丁)
                 if (rule.behaviorType == "sleep_post" && isSleepPostHit(rule, detect, regionState))
                 {
                     decision.matched = true;
                     decision.ruleId = rule.id;
                     decision.customEventName = rule.customEventName;
-                    decision.behaviorType = "sleep_post";
+                    decision.behaviorType = "sleep";
                     decision.regionId = regionId;
                     decision.regionName = regionName;
                     return decision;
