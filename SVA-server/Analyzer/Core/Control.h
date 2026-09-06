@@ -104,7 +104,8 @@ namespace SVAAnalyzer
 		double directionAngleDeg = 0.0;
 		double directionToleranceDeg = 30.0;
 		// ===== 睡岗增量 (sleep_post) =====
-		double headPitchThresholdDeg = 60.0; // 低头俯角阈值(度),0/未配置由默认值块兜底
+		double headPitchThresholdDeg = 0.0; // 俯角判据阈值(度);>0 启用"角度"判据(默认值块夹取 20~170)
+		double hdThreshold = 0.0;           // 头肩距离比判据阈值(0~1,AI 角色 θ_hd≈0.12);>0 启用"hd"判据;两者均 0 时默认 hd=0.12
 		std::string sequenceId;
 		int stageIndex = 0;
 		int64_t stageTimeoutMs = 0;
@@ -773,6 +774,13 @@ namespace SVAAnalyzer
 					{
 						rule.headPitchThresholdDeg = pitchThreshold;
 					}
+					double headDropThreshold = 0.0;
+					if (tryParseJsonNumber(item["hdThreshold"], headDropThreshold) ||
+						tryParseJsonNumber(item["thetaHd"], headDropThreshold) ||
+						tryParseJsonNumber(item["theta_hd"], headDropThreshold))
+					{
+						rule.hdThreshold = headDropThreshold;
+					}
 				}
 				double directionAngleDeg = 0.0;
 				if (tryParseJsonNumber(item["directionAngleDeg"], directionAngleDeg) ||
@@ -1074,15 +1082,27 @@ namespace SVAAnalyzer
 					// ===== 睡岗增量 (sleep_post) =====
 					else if (rule.behaviorType == "sleep_post")
 					{
-						// 持续低头时长默认 5000ms;俯角阈值默认 60°;静止约束默认关闭(配置 maxSpeedPxPerSec 才生效)
+						// 持续低头时长默认 5000ms(演示可用 2000,部署建议 8000,布控参数外部可调)
+						// 判据:两者均未配置 → 默认 hd 判据 θ=0.12(AI 角色 Python 验证口径);
+						//       仅 headPitchThresholdDeg>0 → 角度判据;仅 hdThreshold>0 → hd 判据
 						rule.thresholdMs = std::max<int64_t>(1000, std::min<int64_t>(3600000,
 							rule.thresholdMs > 0 ? rule.thresholdMs : 5000));
 						rule.thresholdCount = 0;
 						rule.maxSpeedPxPerSec = std::min(10000.0, rule.maxSpeedPxPerSec); // 0 = 不约束(保持默认关)
 						rule.maxDisplacementPx = 0.0;
 						rule.distanceThresholdPx = 0.0;
-						rule.headPitchThresholdDeg = std::max(20.0, std::min(170.0,
-							rule.headPitchThresholdDeg > 0.0 ? rule.headPitchThresholdDeg : 60.0));
+						if (rule.headPitchThresholdDeg > 0.0)
+						{
+							rule.headPitchThresholdDeg = std::max(20.0, std::min(170.0, rule.headPitchThresholdDeg));
+						}
+						else if (rule.hdThreshold > 0.0)
+						{
+							rule.hdThreshold = std::max(0.01, std::min(1.0, rule.hdThreshold));
+						}
+						else
+						{
+							rule.hdThreshold = 0.12; // 默认 hd 判据(AI 角色 θ_hd)
+						}
 					}
 					else if (rule.behaviorType == "count_threshold")
 					{

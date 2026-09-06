@@ -36,7 +36,10 @@ namespace SVAAnalyzer
             return mScheduler->on_yolo11n_80;
         }
         // 睡岗增量(sleep-post):YOLO-Pose 关键点模型(未加载时为 nullptr → 上层按"不支持的算法"跳过该任务)
-        if (algorithmCode == "on_yolo11n_pose_sleep" || algorithmCode == "ov_yolo11n_pose_sleep")
+        // 对接三方命名:AI 角色 on_yolo11n_pose / 后端 av_algorithm 种子 on_yolopose_sleep / 历史名 on_yolo11n_pose_sleep
+        if (algorithmCode == "on_yolo11n_pose" || algorithmCode == "ov_yolo11n_pose" ||
+            algorithmCode == "on_yolopose_sleep" ||
+            algorithmCode == "on_yolo11n_pose_sleep" || algorithmCode == "ov_yolo11n_pose_sleep")
         {
             return mScheduler->on_yolo11n_pose_sleep;
         }

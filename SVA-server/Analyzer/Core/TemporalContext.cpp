@@ -218,8 +218,11 @@ namespace SVAAnalyzer
 
             float pitchDeg = 0.0f;
             float noseShoulderGap = 0.0f;
+            float headDropRatio = 0.0f;
             float visibilityAvg = 0.0f;
-            if (!computePosePitchDeg(track.keypoints, pitchDeg, noseShoulderGap, visibilityAvg))
+            if (!computePoseMetrics(track.keypoints,
+                                    static_cast<float>(track.y2 - track.y1),
+                                    pitchDeg, noseShoulderGap, headDropRatio, visibilityAvg))
             {
                 // 平滑后可见性仍不足(理论上罕见:conf 未被 EMA 稀释)
                 track.keypointsPresent = false;
@@ -233,6 +236,7 @@ namespace SVAAnalyzer
             PosePitchSample sample;
             sample.timestampMs = timestampMs;
             sample.pitchDeg = pitchDeg;
+            sample.headDropRatio = headDropRatio; // AI 角色 hd 口径:(肩中Y-头Y)/框高
             track.posePitchHistory.push_back(sample);
 
             // 双上限:条数 64 / 时间窗 10s(按时间戳裁剪,低帧率下时长仍精确)
@@ -372,16 +376,26 @@ namespace SVAAnalyzer
 
             appendTrail(track, detect.x1, detect.y1, detect.x2, detect.y2, timestampMs);
             updateRegionStates(track, control, timestampMs);
-            // 睡岗增量:新 track 直接采用本帧姿态并记录首条采样
+            // 睡岗增量:新 track 直接采用本帧姿态并记录首条采样(pitch 与 hd 同帧同源)
             track.keypoints = detect.keypoints;
             track.keypointsPresent = detect.keypointsPresent;
             track.posePitchDeg = detect.posePitchDeg;
             if (track.keypointsPresent && track.posePitchDeg > 0.0f)
             {
-                PosePitchSample sample;
-                sample.timestampMs = timestampMs;
-                sample.pitchDeg = track.posePitchDeg;
-                track.posePitchHistory.push_back(sample);
+                float pitchDeg = 0.0f;
+                float noseShoulderGap = 0.0f;
+                float headDropRatio = 0.0f;
+                float visibilityAvg = 0.0f;
+                if (computePoseMetrics(track.keypoints,
+                                       static_cast<float>(track.y2 - track.y1),
+                                       pitchDeg, noseShoulderGap, headDropRatio, visibilityAvg))
+                {
+                    PosePitchSample sample;
+                    sample.timestampMs = timestampMs;
+                    sample.pitchDeg = pitchDeg;
+                    sample.headDropRatio = headDropRatio;
+                    track.posePitchHistory.push_back(sample);
+                }
             }
             writeTemporalFields(track, detect, timestampMs, true);
             return track;

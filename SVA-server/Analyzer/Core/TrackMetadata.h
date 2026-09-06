@@ -19,13 +19,15 @@ namespace SVAAnalyzer
     };
 
     /**
-     * @brief 一个时间点的头部俯角采样(时序判定用)。
+     * @brief 一个时间点的头部姿态采样(时序判定用)。
      * 睡岗检测增量:记录于 TemporalTrackState / DetectObject.posePitchHistory。
+     * pitchDeg 与 headDropRatio 同帧同源(同一组关键点计算);规则按所选判据消费其一。
      */
     struct PosePitchSample
     {
         int64_t timestampMs = 0;
-        float pitchDeg = 0.0f;
+        float pitchDeg = 0.0f;     // 头部俯角(0°=直立,180°=完全低头),角度判据用
+        float headDropRatio = 0.0f; // 头肩距离比 (肩中点Y-头点Y)/框高;低头→小/负;hd 判据用(AI 角色口径 θ=0.12)
     };
 
     struct TrackTrailPoint

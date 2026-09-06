@@ -194,12 +194,33 @@ namespace SVAAnalyzer
 
         // ===== 睡岗增量 (sleep-post / YOLO-Pose) =====
         // 可选模型:缺失/损坏仅告警,不影响分析器启动与原有算法(增量原则 R3)
+        // 模型契约对接 AI 角色:规范文件 yolo11n-pose.onnx(letterbox114);向后兼容曾用名 yolo11n_pose_sleep.onnx
         try
         {
-            std::string poseModelPath = mConfig->modelDir + "/yolo11n_pose_sleep.onnx";
+            std::vector<std::string> poseCandidates;
+            poseCandidates.push_back(mConfig->modelDir + "/yolo11n-pose.onnx");
+            poseCandidates.push_back(mConfig->modelDir + "/yolo11n_pose_sleep.onnx");
             std::vector<std::string> poseClassNames = {"person"};
-            LOGI("初始化 on_yolo11n_pose_sleep (%s)", poseModelPath.c_str());
-            on_yolo11n_pose_sleep = new AlgorithmOnYolo(mConfig, poseModelPath, poseClassNames, "on_yolo11n_pose_sleep");
+            bool poseLoaded = false;
+            std::string poseFailDetail;
+            for (size_t ci = 0; ci < poseCandidates.size() && !poseLoaded; ++ci)
+            {
+                try
+                {
+                    LOGI("初始化 on_yolo11n_pose (%s)", poseCandidates[ci].c_str());
+                    on_yolo11n_pose_sleep = new AlgorithmOnYolo(mConfig, poseCandidates[ci], poseClassNames, "on_yolo11n_pose");
+                    poseLoaded = true;
+                }
+                catch (const std::exception &inner)
+                {
+                    poseFailDetail = inner.what();
+                    on_yolo11n_pose_sleep = nullptr;
+                }
+            }
+            if (!poseLoaded)
+            {
+                LOGE("睡岗模型加载失败(不影响启动): %s", poseFailDetail.c_str());
+            }
         }
         catch (const std::exception &e)
         {

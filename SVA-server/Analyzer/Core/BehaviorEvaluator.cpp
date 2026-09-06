@@ -359,9 +359,11 @@ namespace SVAAnalyzer
         /**
          * @brief 睡岗增量(sleep_post):持续低头判定。
          *
-         * 判定逻辑:在 [now - thresholdMs, now] 时间窗内,统计"俯角 >= headPitchThresholdDeg"
-         * 的最长连续采样段(posePitchHistory 按时间戳递增,姿态不可用帧天然形成缺口中断),
+         * 判定逻辑:在 [now - thresholdMs, now] 时间窗内,统计所选判据(默认 hd / 可选角度)
+         * "低头成立"的最长连续采样段(posePitchHistory 按时间戳递增,姿态不可用帧天然形成缺口中断),
          * 段首尾时间跨度 >= thresholdMs 即判定睡岗命中。
+         * - 判据选择:rule.hdThreshold>0 → hd(头肩距离比,AI 角色口径,默认 0.12);
+         *           否则 headPitchThresholdDeg>0 → 俯角(度)。
          * - 静止约束默认关闭:仅当规则配置 maxSpeedPxPerSec > 0 时,要求目标非 moving 且速度不超限。
          * - 有区域绑定(geometryId/regionState)时要求目标当前在区域内。
          */
@@ -383,7 +385,10 @@ namespace SVAAnalyzer
             }
 
             const int64_t thresholdMs = std::max<int64_t>(1000, rule.thresholdMs > 0 ? rule.thresholdMs : 5000);
-            const double pitchThresholdDeg = rule.headPitchThresholdDeg > 0.0 ? rule.headPitchThresholdDeg : 60.0;
+            // 判据选择:hdcriteria = (headPitchThresholdDeg<=0)→hd(默认,θ=0.12 或规则值);否则角度判据
+            const bool useHdCriteria = rule.headPitchThresholdDeg <= 0.0;
+            const double hdThreshold = rule.hdThreshold > 0.0 ? rule.hdThreshold : 0.12;
+            const double pitchThresholdDeg = rule.headPitchThresholdDeg; // >0 时角度判据
 
             // 静止约束(默认关:maxSpeedPxPerSec <= 0 表示不约束)
             if (rule.maxSpeedPxPerSec > 0.0)
@@ -406,7 +411,10 @@ namespace SVAAnalyzer
                 {
                     continue;
                 }
-                if (sample.pitchDeg >= pitchThresholdDeg)
+                const bool headDown = useHdCriteria
+                                          ? (sample.headDropRatio <= hdThreshold)
+                                          : (sample.pitchDeg >= pitchThresholdDeg);
+                if (headDown)
                 {
                     if (!inStreak)
                     {

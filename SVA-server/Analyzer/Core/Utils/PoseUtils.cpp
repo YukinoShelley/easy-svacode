@@ -8,7 +8,7 @@ namespace SVAAnalyzer
 {
     namespace
     {
-        /** 关键点可见性门槛:低于该置信度视为不可用(参照方案书 A3)。 */
+        /** 关键点可见性门槛:低于该置信度视为不可用(方案书 A3:0.3)。 */
         constexpr float kMinKeypointConfidence = 0.3f;
 
         bool isPointUsable(const PoseKeypoint &point)
@@ -17,13 +17,16 @@ namespace SVAAnalyzer
         }
     }
 
-    bool computePosePitchDeg(const std::vector<PoseKeypoint> &keypoints,
-                             float &pitchDeg,
-                             float &noseShoulderGap,
-                             float &visibilityAvg)
+    bool computePoseMetrics(const std::vector<PoseKeypoint> &keypoints,
+                            float boxHeight,
+                            float &pitchDeg,
+                            float &noseShoulderGap,
+                            float &headDropRatio,
+                            float &visibilityAvg)
     {
         pitchDeg = 0.0f;
         noseShoulderGap = 0.0f;
+        headDropRatio = 0.0f;
         visibilityAvg = 0.0f;
 
         // COCO 17 点索引(0 鼻 / 3 左耳 / 4 右耳 / 5 左肩 / 6 右肩)
@@ -84,9 +87,11 @@ namespace SVAAnalyzer
 
         visibilityAvg = visibleSum / static_cast<float>(visibleCount);
 
-        // v = 肩中点 − 头点(图像坐标,y 向下);与竖直向下轴 (0,1) 的夹角即俯角
+        // 肩中点
         const float midSx = (lShoulder.x + rShoulder.x) * 0.5f;
         const float midSy = (lShoulder.y + rShoulder.y) * 0.5f;
+
+        // v = 肩中点 − 头点(图像坐标,y 向下);与竖直向下轴 (0,1) 的夹角即俯角
         const float vx = midSx - headX;
         const float vy = midSy - headY;
         const float magnitude = std::sqrt(vx * vx + vy * vy);
@@ -95,7 +100,6 @@ namespace SVAAnalyzer
             return false;
         }
 
-        // 头点与肩中点重合或过近:姿态不可判
         float cosAngle = vy / magnitude;
         if (cosAngle > 1.0f)
         {
@@ -110,6 +114,21 @@ namespace SVAAnalyzer
         // 调试指标:水平前探比 |dx|/|v|(0=正坐,1=完全前倾趴下;水平转头会增大,仅供调参对照)
         noseShoulderGap = std::fabs(vx) / magnitude;
 
+        // 头肩距离比(AI 角色 Python 验证口径,θ_hd≈0.12):(肩中点Y − 头点Y)/框高;低头→小/负
+        if (boxHeight > 0.0f)
+        {
+            headDropRatio = vy / boxHeight;
+        }
+
         return true;
+    }
+
+    bool computePosePitchDeg(const std::vector<PoseKeypoint> &keypoints,
+                             float &pitchDeg,
+                             float &noseShoulderGap,
+                             float &visibilityAvg)
+    {
+        float headDropRatio = 0.0f;
+        return computePoseMetrics(keypoints, 0.0f, pitchDeg, noseShoulderGap, headDropRatio, visibilityAvg);
     }
 }

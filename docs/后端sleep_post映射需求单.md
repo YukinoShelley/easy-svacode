@@ -58,3 +58,12 @@ VALUES (3,'on_yolo11n_pose_sleep','睡岗检测(yolo11n-pose)','',1,'person','�
 
 - 睡岗告警要"告警截图+录像"闭环,还依赖分析器端模型文件 `yolo11n_pose_sleep.onnx` 就位(AI 角色产出,我负责接入);
 - 前端布控页出现"睡岗检测"选项依赖本单第 4 节 av_algorithm 行 + 前端角色页面改动。
+
+---
+
+## 七、现状更新(2026-09-06,对接各成员分支后)
+
+- **dpp/backend 分支**:HWaringController 未改动,`sleep`/`sleep_post` 均无映射(与本文档第二节要求一致,仍待实施);其 up.sql 已注册 av_algorithm 种子 `on_yolopose_sleep`,分析器已按别名兼容。
+- **dpp/algorithm 分支**:附带一个 HWaringController 补丁(`sleep`→`SVA_SLEEP`/`睡岗告警`,白名单放行 sleep、告警名防覆盖)。
+- **建议最终方案(最小改动、两处兼容)**:把 algorithm 分支补丁同款逻辑扩为同时放行 `sleep_post`——即新增 `"sleep_post"` 到 normalize 白名单并映射到同一组常量 `SVA_SLEEP`/`SVA_SLEEP_ALARM_TYPE_NAME="睡岗告警"`(alarm_type 统一 SVA_SLEEP,前端/统计无需新增类型)。分析器以 `sleep_post` 事件上报,旧 `sleep` 规则(横躺)事件也可入库。
+- 若坚持独立类型,按第二节 SVA_SLEEP_POST 方案实施亦可;分析器侧两者均可接受(只认 behaviorType 字符串)。

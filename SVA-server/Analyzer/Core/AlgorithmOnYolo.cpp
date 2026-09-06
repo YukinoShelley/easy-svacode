@@ -210,11 +210,13 @@ namespace SVAAnalyzer
             LOGI("AlgorithmOnYolo profile=%s decoder=direct_detections preprocess=direct_resize_bgr score=0.25", algorithmCode.data());
             return;
         }
-        // 睡岗增量(sleep-post):YOLO-Pose 关键点模型,预处理与 DenseWithNms 相同(方形 pad + RGB)
-        if (algorithmCode == "on_yolo11n_pose_sleep" || algorithmCode == "ov_yolo11n_pose_sleep")
+        // 睡岗增量(sleep-post):YOLO-Pose 关键点模型
+        // 模型契约对接 AI 角色:code=on_yolo11n_pose;预处理=letterbox 灰边114(勿用方形黑边)
+        if (algorithmCode == "on_yolo11n_pose" || algorithmCode == "ov_yolo11n_pose" ||
+            algorithmCode == "on_yolo11n_pose_sleep" || algorithmCode == "ov_yolo11n_pose_sleep")
         {
             mDecoder = YoloOutputDecoder::DensePoseWithNms;
-            LOGI("AlgorithmOnYolo profile=%s decoder=dense_pose_with_nms preprocess=square_rgb score=0.50 nms=0.50", algorithmCode.data());
+            LOGI("AlgorithmOnYolo profile=%s decoder=dense_pose_with_nms preprocess=letterbox_gray114 score=0.50 nms=0.50", algorithmCode.data());
             return;
         }
         LOGI("AlgorithmOnYolo profile=%s decoder=dense_with_nms preprocess=square_rgb score=0.50 nms=0.50", algorithmCode.data());
@@ -321,7 +323,8 @@ namespace SVAAnalyzer
     // ===== 睡岗增量(sleep-post):YOLO-Pose 关键点解码 =====
     // 输出布局(1x56xN,参照 ultralytics nn/modules/head.py class Pose):
     //   每 anchor 56 列 = 框4(cx,cy,w,h) + 类别1(person) + 17关键点 x 3(x,y,conf)
-    bool OnnxRuntimeEngine::decodeDensePoseWithNms(const float *pdata, int imageWidth, int imageHeight, int paddedImageSize, std::vector<DetectObject> &detects)
+    bool OnnxRuntimeEngine::decodeDensePoseWithNms(const float *pdata, int imageWidth, int imageHeight,
+                                                   float letterboxScale, float padX, float padY, std::vector<DetectObject> &detects)
     {
         constexpr int kPoseAnchorStride = 56; // 4 + 1 + 17*3
         constexpr int kPoseKptCount = 17;
@@ -331,11 +334,16 @@ namespace SVAAnalyzer
             LOGE("AlgorithmOnYolo dense_pose invalid output dim=%d, expect 56", mOutputDim);
             return false;
         }
+        if (letterboxScale <= 0.0f)
+        {
+            LOGE("AlgorithmOnYolo dense_pose invalid letterboxScale=%f", letterboxScale);
+            return false;
+        }
 
         float score_threshold = 0.5; // 与 DenseWithNms 老解码器一致(initPostprocessProfile 日志)
         float nms_threshold = 0.5;
-        float x_factor = static_cast<float>(paddedImageSize) / static_cast<float>(mInputWidth);
-        float y_factor = static_cast<float>(paddedImageSize) / static_cast<float>(mInputHeight);
+        // 逆映射:模型输入(640,letterbox) → 原图像素: orig = (v - pad) / scale
+        const float invScale = 1.0f / letterboxScale;
 
         std::vector<cv::Rect> boxes;
         std::vector<int> classIds;
@@ -343,12 +351,12 @@ namespace SVAAnalyzer
 
         for (int i = 0; i < mOutputRow; i++)
         {
-            const float *anchor = pdata + static_cast<size_t>(i) * kPoseAnchorStride;
-            const float cx = anchor[0];
-            const float cy = anchor[1];
-            const float ow = anchor[2];
-            const float oh = anchor[3];
-            const float objectness = anchor[kPoseKptStart - 1]; // col4 = person 类别分
+            // 标准 ultralytics 导出 (1,56,N) 为 channel-major:pdata[c*N + a](N=mOutputRow)
+            const float cx = pdata[0 * mOutputRow + i];
+            const float cy = pdata[1 * mOutputRow + i];
+            const float ow = pdata[2 * mOutputRow + i];
+            const float oh = pdata[3 * mOutputRow + i];
+            const float objectness = pdata[4 * mOutputRow + i]; // 第 4 通道 = person 类别分
             if (!std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(ow) || !std::isfinite(oh) || !std::isfinite(objectness))
             {
                 continue;
@@ -358,10 +366,14 @@ namespace SVAAnalyzer
                 continue;
             }
 
-            int left = static_cast<int>((cx - 0.5f * ow) * x_factor);
-            int top = static_cast<int>((cy - 0.5f * oh) * y_factor);
-            int right = static_cast<int>((cx + 0.5f * ow) * x_factor);
-            int bottom = static_cast<int>((cy + 0.5f * oh) * y_factor);
+            const float cxOrig = (cx - padX) * invScale;
+            const float cyOrig = (cy - padY) * invScale;
+            const float wOrig = ow * invScale;
+            const float hOrig = oh * invScale;
+            int left = static_cast<int>(cxOrig - 0.5f * wOrig);
+            int top = static_cast<int>(cyOrig - 0.5f * hOrig);
+            int right = static_cast<int>(cxOrig + 0.5f * wOrig);
+            int bottom = static_cast<int>(cyOrig + 0.5f * hOrig);
 
             left = std::max(0, std::min(left, imageWidth - 1));
             top = std::max(0, std::min(top, imageHeight - 1));
@@ -388,7 +400,7 @@ namespace SVAAnalyzer
                 continue;
             }
             const cv::Rect &box = boxes[index];
-            const float *anchor = pdata + static_cast<size_t>(index) * kPoseAnchorStride;
+            const int anchorIndex = index; // channel-major 布局下 NMS 索引即 anchor 下标
 
             DetectObject detect;
             detect.x1 = box.x;
@@ -399,16 +411,15 @@ namespace SVAAnalyzer
             detect.class_name = (!mClassNames.empty()) ? mClassNames[0] : "person";
             detect.class_score = confidences[index];
 
-            // 关键点:模型输入空间(0..640) → 原图像素(与框同一 pad 比例),裁剪到帧内,conf 原样保留
+            // 关键点:channel-major pdata[(5+3k)*N + a],模型输入(letterbox 640 空间) → 原图像素: orig=(v-pad)/scale
             detect.keypoints.clear();
             detect.keypoints.reserve(kPoseKptCount);
             for (int k = 0; k < kPoseKptCount; k++)
             {
-                const float *kpt = anchor + kPoseKptStart + static_cast<size_t>(k) * 3;
                 PoseKeypoint point;
-                point.x = kpt[0] * x_factor;
-                point.y = kpt[1] * y_factor;
-                point.confidence = kpt[2];
+                point.x = (pdata[(kPoseKptStart + 3 * k) * mOutputRow + anchorIndex] - padX) * invScale;
+                point.y = (pdata[(kPoseKptStart + 3 * k + 1) * mOutputRow + anchorIndex] - padY) * invScale;
+                point.confidence = pdata[(kPoseKptStart + 3 * k + 2) * mOutputRow + anchorIndex];
                 if (std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.confidence))
                 {
                     point.x = std::max(0.0f, std::min(point.x, static_cast<float>(imageWidth - 1)));
@@ -423,11 +434,14 @@ namespace SVAAnalyzer
                 detect.keypoints.push_back(point);
             }
 
-            // 姿态几何事实(俯角/可见性),不含任何规则阈值
+            // 姿态几何事实(俯角/头肩距离比/可见性),不含任何规则阈值;hd 需框高归一化
             float pitchDeg = 0.0f;
             float noseShoulderGap = 0.0f;
+            float headDropRatio = 0.0f;
             float visibilityAvg = 0.0f;
-            detect.keypointsPresent = computePosePitchDeg(detect.keypoints, pitchDeg, noseShoulderGap, visibilityAvg);
+            detect.keypointsPresent = computePoseMetrics(detect.keypoints,
+                                                         static_cast<float>(detect.y2 - detect.y1),
+                                                         pitchDeg, noseShoulderGap, headDropRatio, visibilityAvg);
             detect.posePitchDeg = pitchDeg;
 
             detects.push_back(detect);
@@ -519,7 +533,26 @@ namespace SVAAnalyzer
 
         cv::Mat inputImage;
         int paddedImageSize = std::max(image_h, image_w);
-        if (mDecoder == YoloOutputDecoder::DirectDetections)
+        float poseScale = 1.0f;
+        float posePadX = 0.0f;
+        float posePadY = 0.0f;
+        if (mDecoder == YoloOutputDecoder::DensePoseWithNms)
+        {
+            // 睡岗增量(sleep-post):letterbox 灰边 114(与 AI 角色模型/Python 验证口径一致)
+            // 保持宽高比缩放至 640x640,剩余区域以 114 填充;解码逆映射 orig=(v-pad)/scale
+            const float inputW = static_cast<float>(mInputWidth);
+            const float inputH = static_cast<float>(mInputHeight);
+            poseScale = std::min(inputW / static_cast<float>(image_w), inputH / static_cast<float>(image_h));
+            const int scaledW = std::max(1, static_cast<int>(std::round(static_cast<float>(image_w) * poseScale)));
+            const int scaledH = std::max(1, static_cast<int>(std::round(static_cast<float>(image_h) * poseScale)));
+            posePadX = (inputW - static_cast<float>(scaledW)) * 0.5f;
+            posePadY = (inputH - static_cast<float>(scaledH)) * 0.5f;
+            inputImage = cv::Mat(mInputHeight, mInputWidth, CV_8UC3, cv::Scalar(114, 114, 114));
+            cv::Mat resized;
+            cv::resize(image, resized, cv::Size(scaledW, scaledH), 0, 0, cv::INTER_LINEAR);
+            resized.copyTo(inputImage(cv::Rect(static_cast<int>(posePadX), static_cast<int>(posePadY), scaledW, scaledH)));
+        }
+        else if (mDecoder == YoloOutputDecoder::DirectDetections)
         {
             inputImage = image;
         }
@@ -558,10 +591,10 @@ namespace SVAAnalyzer
         {
             return decodeDirectDetections(pdata, image_w, image_h, detects);
         }
-        // 睡岗增量(sleep-post):YOLO-Pose 关键点输出
+        // 睡岗增量(sleep-post):YOLO-Pose 关键点输出(letterbox 逆映射)
         if (mDecoder == YoloOutputDecoder::DensePoseWithNms)
         {
-            return decodeDensePoseWithNms(pdata, image_w, image_h, paddedImageSize, detects);
+            return decodeDensePoseWithNms(pdata, image_w, image_h, poseScale, posePadX, posePadY, detects);
         }
         return decodeDenseOutputWithNms(pdata, image_w, image_h, paddedImageSize, detects);
     }

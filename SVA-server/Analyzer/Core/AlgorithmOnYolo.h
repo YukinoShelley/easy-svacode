@@ -65,7 +65,9 @@ namespace SVAAnalyzer
 		bool decodeDenseOutputWithNms(const float *pdata, int imageWidth, int imageHeight, int paddedImageSize, std::vector<DetectObject> &detects);
 		bool decodeDirectDetections(const float *pdata, int imageWidth, int imageHeight, std::vector<DetectObject> &detects);
 		// 睡岗增量(sleep-post):YOLO-Pose 1x56xN = 框4 + 类别1(person) + 17关键点x3(x,y,conf)
-		bool decodeDensePoseWithNms(const float *pdata, int imageWidth, int imageHeight, int paddedImageSize, std::vector<DetectObject> &detects);
+		// 解码映射对接 AI 角色模型契约:letterbox 灰边 114(scale/pad 为 640 输入空间值)
+		bool decodeDensePoseWithNms(const float *pdata, int imageWidth, int imageHeight,
+									float letterboxScale, float padX, float padY, std::vector<DetectObject> &detects);
 	};
 	class AlgorithmOnYolo : public Algorithm
 	{
