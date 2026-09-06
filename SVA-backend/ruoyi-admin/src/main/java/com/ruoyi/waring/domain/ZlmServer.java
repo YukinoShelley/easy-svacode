@@ -29,5 +29,11 @@ public class ZlmServer {
 
     private String secret;
 
+    /** 是否启用 GB28181 能力(SIP/通道 REST),媒体组按契约实现后置 1 */
+    private Integer gb28181_enabled;
+
+    /** GB28181 SIP 服务端口(默认 5060) */
+    private Integer gb_sip_port;
+
     private Integer enabled;
 }

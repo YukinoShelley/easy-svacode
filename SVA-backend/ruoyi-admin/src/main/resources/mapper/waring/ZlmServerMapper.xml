@@ -11,6 +11,8 @@
         <result property="media_http_port" column="media_http_port"/>
         <result property="media_rtsp_port" column="media_rtsp_port"/>
         <result property="secret" column="secret"/>
+        <result property="gb28181_enabled" column="gb28181_enabled"/>
+        <result property="gb_sip_port" column="gb_sip_port"/>
         <result property="enabled" column="enabled"/>
     </resultMap>
 
@@ -24,6 +26,8 @@
             media_http_port,
             media_rtsp_port,
             secret,
+            gb28181_enabled,
+            gb_sip_port,
             enabled
         FROM zlm_server
         WHERE id = #{id}
@@ -41,6 +45,8 @@
             media_http_port,
             media_rtsp_port,
             secret,
+            gb28181_enabled,
+            gb_sip_port,
             enabled
         FROM zlm_server
         WHERE enabled = 1

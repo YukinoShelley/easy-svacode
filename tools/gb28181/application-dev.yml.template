@@ -1,0 +1,50 @@
+# ============================================================
+# wvp-GB28181-pro 配置模板（示例关键项）
+# 用法：复制为 <WVP>/src/main/resources/application-dev.yml 后修改
+# 说明：具体键名以所拉版本 application-dev.yml 为准；此处仅列必然要用到的项
+# ============================================================
+server:
+  port: 18080
+
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/wvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root          # 改
+    password: 请填写        # 改
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0             # 建议独立 db 或前缀，避免与 easySVA 冲突
+    # password:            # 若有
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+
+# ---- SIP 信令（WVP 作为国标平台） ----
+sip:
+  id: 34020000002000000001   # 平台国标编码
+  domain: 3402000000
+  ip: 10.122.205.66          # 本机 SIP 对外地址（需设备可达）
+  port: 5060
+  password: 12345678
+
+# ---- 流媒体服务（对接现有 ZLM） ----
+media:
+  id: default-zlm
+  ip: 10.122.205.66          # ZLM 对外地址
+  # 以下为现有 ZLM 端口（SVA-mediaServer）
+  http-port: 9992
+  rtsp-port: 9994
+  rtmp-port: 9995
+  secret: V3522025zlm0aA9ajn7UiOWi   # zlm_server 表 secret
+  rtp:
+    # 与 ZLM [rtp] port_range 对应
+    port-range: 30000-40000
+  # 录像/按需相关如需启用再按版本配置
+
+# ---- 用户/鉴权 ----
+user-settings:
+  # 以实际版本为准（管理员账号、注册码、保活等）
+  keepalive-timeout: 60

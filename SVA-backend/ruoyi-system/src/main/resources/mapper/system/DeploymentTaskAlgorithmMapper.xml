@@ -13,6 +13,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="scoreThreshold" column="score_threshold" />
         <result property="nmsThreshold" column="nms_threshold" />
         <result property="targetCodesText" column="target_codes" />
+        <result property="paramsJson" column="params_json" />
         <result property="sortOrder" column="sort_order" />
         <result property="createTime" column="create_time" />
         <result property="updateTime" column="update_time" />
@@ -27,6 +28,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                score_threshold,
                nms_threshold,
                target_codes,
+               params_json,
                sort_order,
                create_time,
                update_time
@@ -57,6 +59,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             score_threshold,
             nms_threshold,
             target_codes,
+            params_json,
             sort_order,
             create_time,
             update_time
@@ -70,6 +73,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 #{item.scoreThreshold},
                 #{item.nmsThreshold},
                 #{item.targetCodesText},
+                #{item.paramsJson},
                 #{item.sortOrder},
                 #{item.createTime},
                 #{item.updateTime}

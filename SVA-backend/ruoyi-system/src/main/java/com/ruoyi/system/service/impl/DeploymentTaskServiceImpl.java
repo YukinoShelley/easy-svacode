@@ -111,6 +111,7 @@ public class DeploymentTaskServiceImpl implements IDeploymentTaskService
             target.setDetectFps(source.getDetectFps());
             target.setScoreThreshold(source.getScoreThreshold());
             target.setNmsThreshold(source.getNmsThreshold());
+            target.setParamsJson(source.getParamsJson());
             target.setTargetCodes(source.getTargetCodes());
             target.setSortOrder(source.getSortOrder() == null ? i : source.getSortOrder());
             target.setCreateTime(now);

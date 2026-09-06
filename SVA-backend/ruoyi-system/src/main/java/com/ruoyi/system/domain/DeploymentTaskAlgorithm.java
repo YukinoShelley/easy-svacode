@@ -21,6 +21,7 @@ public class DeploymentTaskAlgorithm extends BaseEntity
     private Float detectFps;
     private Float scoreThreshold;
     private Float nmsThreshold;
+    private String paramsJson;
     private List<String> targetCodes = new ArrayList<>();
     private String targetCodesText;
     private Integer sortOrder;
@@ -93,6 +94,17 @@ public class DeploymentTaskAlgorithm extends BaseEntity
     public void setNmsThreshold(Float nmsThreshold)
     {
         this.nmsThreshold = nmsThreshold;
+    }
+
+    /** 算法自定义参数(JSON),如睡岗 {"headPitch":30,"durationSec":5};后端原样透传分析器 */
+    public String getParamsJson()
+    {
+        return paramsJson;
+    }
+
+    public void setParamsJson(String paramsJson)
+    {
+        this.paramsJson = paramsJson;
     }
 
     public List<String> getTargetCodes()

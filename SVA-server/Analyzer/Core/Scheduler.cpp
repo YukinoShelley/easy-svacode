@@ -194,7 +194,16 @@ namespace SVAAnalyzer
         LOGI("初始化 on_yolo11n_pose (yolo11n-pose.onnx, 睡岗姿态)");
         modelPath = mConfig->modelDir + "/yolo11n-pose.onnx";
         std::vector<std::string> poseClassNames = { "person" };
-        on_pose_sleep = new AlgorithmOnYolo(mConfig, modelPath, poseClassNames, "on_yolo11n_pose");
+        // 收敛增强(向算法实现靠拢时补充):缺模型/模型损坏仅告警,不影响启动与其他算法
+        try
+        {
+            on_pose_sleep = new AlgorithmOnYolo(mConfig, modelPath, poseClassNames, "on_yolo11n_pose");
+        }
+        catch (const std::exception &e)
+        {
+            LOGE("睡岗模型加载失败(不影响启动): %s", e.what());
+            on_pose_sleep = nullptr;
+        }
 
         LOGI("initAlgorithm() end - total ONNX models loaded: 3");
         return true;
